@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #0B1F3A;
+  --color-navy-dark: #061120;
+  --color-navy-light: #152E52;
+  --color-navy-muted: #1E3A8A;
+  
+  --color-gold: #C9A227;
+  --color-gold-light: #E2BC3E;
+  --color-gold-dark: #9A7B1D;
+
+  --color-flag-red: #CE1126;
+  --color-flag-yellow: #FCD116;
+  --color-flag-green: #006B3F;
+  --color-flag-green-dark: #004D2C;
+  --color-flag-green-light: #008750;
+
+  --color-civic-slate: #F8FAFC;
+  --color-civic-border: #E2E8F0;
+  --color-civic-muted: #64748B;
+  --color-civic-ink: #0F172A;
+
+  --font-heading: var(--font-heading), 'Montserrat', sans-serif;
+  --font-body: var(--font-body), 'Inter', sans-serif;
+
+  --color-primary: #0B1F3A;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F1F5F9;
+  --color-secondary-foreground: #0B1F3A;
+  --color-muted: #F8FAFC;
+  --color-muted-foreground: #64748B;
+  --color-border: #E2E8F0;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #0F172A;
+
+  --color-success: #006B3F;
+  --color-warning: #C9A227;
+  --color-error: #CE1126;
+
+  --radius-sharp: 0px;
+  --radius-doc: 2px;
+  --radius-card: 4px;
+  --radius-btn: 6px;
+  --radius-pill: 9999px;
+}
+
+:root {
+  --background: #FFFFFF;
+  --foreground: #0F172A;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, -apple-system, sans-serif;
+  letter-spacing: -0.015em;
+}
+
+/* Civic Flag Stripe Border Utility */
+.flag-stripe-top {
+  position: relative;
+}
+.flag-stripe-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #CE1126 0%, #CE1126 33.33%, #FCD116 33.33%, #FCD116 66.66%, #006B3F 66.66%, #006B3F 100%);
+}
+
+.flag-stripe-left {
+  position: relative;
+}
+.flag-stripe-left::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #CE1126 0%, #CE1126 33.33%, #FCD116 33.33%, #FCD116 66.66%, #006B3F 66.66%, #006B3F 100%);
+}
