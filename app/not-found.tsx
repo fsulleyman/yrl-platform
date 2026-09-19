@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { ShieldAlert, Compass } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -34,19 +34,19 @@ export default function NotFound() {
           </li>
           <li className="flex items-center gap-2 text-slate-700">
             <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
-            <Link href="/positions" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
+            <Link href="/structure" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
               Explore Open Interim Leadership Positions
             </Link>
           </li>
           <li className="flex items-center gap-2 text-slate-700">
             <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
-            <Link href="/nominate" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
+            <Link href="/get-involved/nominate" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
               Submit a Nomination
             </Link>
           </li>
           <li className="flex items-center gap-2 text-slate-700">
             <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
-            <Link href="/join" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
+            <Link href="/get-involved/join" className="text-[#0E1E3B] hover:text-[#006B3F] hover:underline font-medium">
               Register as a General Member
             </Link>
           </li>

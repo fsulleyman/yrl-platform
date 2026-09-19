@@ -27,17 +27,20 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { Disclaimer } from '@/components/ui/Disclaimer';
 import { contactSchema } from '@/lib/validations/contact';
+import { submitContactMessage } from '@/lib/actions/contact';
 
 interface FormStateType {
   full_name: string;
   email: string;
   message: string;
+  honeypot: string;
 }
 
 const initialFormData: FormStateType = {
   full_name: '',
   email: '',
   message: '',
+  honeypot: '',
 };
 
 export function ContactForm() {
@@ -75,8 +78,9 @@ export function ContactForm() {
 
   // Single field validation for onBlur
   const validateField = (name: keyof FormStateType): string => {
+    if (name === 'honeypot') return '';
     try {
-      const fieldSchema = contactSchema.shape[name];
+      const fieldSchema = contactSchema.shape[name as keyof typeof contactSchema.shape];
       fieldSchema.parse(formData[name]);
       return '';
     } catch (err: unknown) {
@@ -103,7 +107,7 @@ export function ContactForm() {
   };
 
   // Submit handler
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Mark all fields as touched
@@ -137,28 +141,77 @@ export function ContactForm() {
     setErrors({});
     setIsSubmitting(true);
 
-    // Simulated submission delay (1,200ms per Model A specification)
-    setTimeout(() => {
-      const randomId = `YRL-MSG-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const now = new Date();
-      const formattedDate = now.toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZoneName: 'short',
-      });
+    try {
+      const serverResult = await submitContactMessage(formData);
 
-      setConfirmationData({
-        referenceId: randomId,
-        submittedAt: formattedDate,
-      });
+      if (serverResult.success && serverResult.referenceId) {
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        });
 
+        setConfirmationData({
+          referenceId: serverResult.referenceId,
+          submittedAt: formattedDate,
+        });
+
+        setIsSuccess(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (serverResult.success) {
+        // Honeypot trap: generic success without official ID
+        const now = new Date();
+        const formattedDate = now.toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        });
+
+        setConfirmationData({
+          referenceId: 'SUBMITTED-FOR-REVIEW',
+          submittedAt: formattedDate,
+        });
+
+        setIsSuccess(true);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        if (serverResult.fieldErrors) {
+          const mappedErrors: Record<string, string> = {};
+          for (const [field, msgs] of Object.entries(serverResult.fieldErrors)) {
+            if (msgs && msgs.length > 0) {
+              mappedErrors[field] = msgs[0];
+            }
+          }
+          setErrors(mappedErrors);
+        }
+        if (serverResult.error) {
+          setErrors((prev) => ({
+            ...prev,
+            _server: serverResult.error!,
+          }));
+        }
+
+        setTimeout(() => {
+          errorSummaryRef.current?.focus();
+        }, 50);
+      }
+    } catch (err) {
+      setErrors({
+        _server: 'A network or server error occurred. Please try again later.',
+      });
+      setTimeout(() => {
+        errorSummaryRef.current?.focus();
+      }, 50);
+    } finally {
       setIsSubmitting(false);
-      setIsSuccess(true);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 1200);
+    }
   };
 
   // Reset form handler
@@ -303,6 +356,18 @@ export function ContactForm() {
         )}
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          {/* Honeypot field (hidden from real users) */}
+          <div className="hidden" aria-hidden="true">
+            <input
+              type="text"
+              name="honeypot"
+              tabIndex={-1}
+              autoComplete="off"
+              value={formData.honeypot}
+              onChange={handleInputChange}
+            />
+          </div>
+
           {/* Field 1: Full Name */}
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">

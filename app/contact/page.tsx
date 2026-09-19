@@ -4,6 +4,7 @@ import {
   HelpCircle,
   FileText,
   Shield,
+  Mail,
   ArrowRight,
   Clock,
   Users,
@@ -22,6 +23,7 @@ import {
 import { NoticeBanner } from '@/components/ui/NoticeBanner';
 import { ContactForm } from './ContactForm';
 import { constructMetadata } from '@/lib/metadata';
+import { getContactEmail } from '@/lib/email/config';
 
 export const metadata = constructMetadata({
   title: 'Contact Us',
@@ -30,6 +32,8 @@ export const metadata = constructMetadata({
 });
 
 export default function ContactPage() {
+  const contactEmail = getContactEmail();
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Top Civic Notice Banner */}
@@ -172,10 +176,25 @@ export default function ContactPage() {
                   </CardTitle>
                 </div>
               </CardHeader>
-              <CardContent className="text-xs text-slate-600 leading-relaxed space-y-2">
-                <p>
-                  Official regional secretariat contact numbers and physical addresses across the 16 regions of Ghana will be published following the conclusion of interim leadership appointments.
-                </p>
+              <CardContent className="text-xs text-slate-600 leading-relaxed space-y-3">
+                {contactEmail ? (
+                  <div className="p-3 bg-white border border-slate-200 rounded-[4px] space-y-1">
+                    <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                      <Mail className="h-3.5 w-3.5 text-[#006B3F]" />
+                      <span>Official Interim Secretariat Email:</span>
+                    </div>
+                    <a
+                      href={`mailto:${contactEmail}`}
+                      className="text-sm font-semibold text-[#0B1F3A] hover:text-[#C9A227] underline break-all block"
+                    >
+                      {contactEmail}
+                    </a>
+                  </div>
+                ) : (
+                  <p>
+                    Official regional secretariat contact numbers and physical addresses across the 16 regions of Ghana will be published following the conclusion of interim leadership appointments.
+                  </p>
+                )}
                 <p className="text-slate-500">
                   All verified organizational announcements are published exclusively via our <Link href="/news" className="text-[#0B1F3A] font-semibold underline hover:text-[#C9A227]">News &amp; Updates</Link> page and <Link href="/notice" className="text-[#0B1F3A] font-semibold underline hover:text-[#C9A227]">Official Notice Board</Link>.
                 </p>

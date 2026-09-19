@@ -1,4 +1,4 @@
-﻿import { z } from 'zod';
+import { z } from 'zod';
 
 export const GHANA_REGIONS = [
   'Ahafo',
@@ -108,7 +108,11 @@ export const nominationSchema = z
       .trim()
       .min(2, { message: 'Enter your area of study or profession' }),
     position_applied: PositionEnum,
-    region_if_regional_minister: z.enum(GHANA_REGIONS).optional().nullable(),
+    region_if_regional_minister: z
+      .enum(GHANA_REGIONS)
+      .optional()
+      .nullable()
+      .or(z.literal('').transform(() => null)),
     has_leadership_experience: z.boolean().default(false),
     prior_position: z.string().trim().optional().nullable(),
     prior_organisation: z.string().trim().optional().nullable(),

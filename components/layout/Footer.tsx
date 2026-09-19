@@ -3,9 +3,11 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Shield, ExternalLink } from 'lucide-react';
 import { FOOTER_NAV, SITE_IDENTITY, SOCIAL_LINKS } from '@/data/navigation';
+import { getContactEmail } from '@/lib/email/config';
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const contactEmail = getContactEmail();
 
   return (
     <footer className="bg-[#061120] text-slate-300 border-t border-[#C9A227]/30 relative mt-auto">
@@ -128,9 +130,21 @@ export function Footer() {
             <h4 className="text-xs font-heading font-bold text-white uppercase tracking-wider mb-4 border-b border-white/10 pb-2">
               Official Channels
             </h4>
-            <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-              Official social communications channels will be published upon conclusion of the interim setup phase.
-            </p>
+            {contactEmail ? (
+              <div className="mb-3">
+                <p className="text-xs text-slate-400 mb-1">Official Inquiries &amp; Correspondence:</p>
+                <a
+                  href={`mailto:${contactEmail}`}
+                  className="text-xs font-medium text-[#FCD116] hover:text-white transition-colors underline break-all"
+                >
+                  {contactEmail}
+                </a>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                Official social communications channels will be published upon conclusion of the interim setup phase.
+              </p>
+            )}
             <ul className="space-y-2">
               {SOCIAL_LINKS.map((link) => (
                 <li key={link.platform}>

@@ -1,9 +1,10 @@
-﻿import React from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { Shield } from 'lucide-react';
 import { Section } from '@/components/ui/Section';
 import { Disclaimer } from '@/components/ui/Disclaimer';
 import { constructMetadata } from '@/lib/metadata';
+import { getContactEmail } from '@/lib/email/config';
 
 export const metadata = constructMetadata({
   title: 'Privacy Policy',
@@ -12,6 +13,8 @@ export const metadata = constructMetadata({
 });
 
 export default function PrivacyPolicyPage() {
+  const contactEmail = getContactEmail();
+
   return (
     <div className="bg-slate-50 min-h-screen py-10 sm:py-16">
       <Section containerSize="narrow" background="white" className="rounded-[4px] border border-slate-200/80 shadow-xs">
@@ -47,9 +50,15 @@ export default function PrivacyPolicyPage() {
             </p>
             <p>
               For inquiries regarding data protection, please contact the YRL Secretariat via email at{' '}
-              <span className="font-mono text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
-                [CONTACT EMAIL — TO BE CONFIRMED]
-              </span>{' '}
+              {contactEmail ? (
+                <a href={`mailto:${contactEmail}`} className="font-mono text-[#006B3F] hover:underline font-semibold">
+                  {contactEmail}
+                </a>
+              ) : (
+                <span className="font-mono text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-medium">
+                  [CONTACT EMAIL — TO BE CONFIRMED]
+                </span>
+              )}{' '}
               or visit our <Link href="/contact" className="text-[#006B3F] underline font-medium">Contact page</Link>.
             </p>
           </section>
@@ -147,9 +156,15 @@ export default function PrivacyPolicyPage() {
             </h2>
             <p>
               To request that your nomination or membership record be deleted or modified, please send a written request to{' '}
-              <span className="font-mono text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
-                [CONTACT EMAIL — TO BE CONFIRMED]
-              </span>{' '}
+              {contactEmail ? (
+                <a href={`mailto:${contactEmail}`} className="font-mono text-[#006B3F] hover:underline font-semibold">
+                  {contactEmail}
+                </a>
+              ) : (
+                <span className="font-mono text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold">
+                  [CONTACT EMAIL — TO BE CONFIRMED]
+                </span>
+              )}{' '}
               from the email address used in your original submission, citing your Full Name and Nomination Reference Number.
             </p>
             <p className="text-xs text-slate-500">

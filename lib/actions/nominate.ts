@@ -1,27 +1,12 @@
-﻿'use server';
+'use server';
 
 import { headers } from 'next/headers';
 import { nominationSubmissionSchema, type NominationSubmissionInput } from '@/lib/validations/nomination';
 import { createAdminClient } from '@/lib/supabase/server';
+import { sendNominationEmail } from '@/lib/email/resend';
 
-// Basic in-memory sliding window rate limiter for IP
-const ipSubmissionTracker = new Map<string, number[]>();
-const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-const MAX_SUBMISSIONS_PER_IP = 5;
-
-function isRateLimited(ip: string): boolean {
-  const now = Date.now();
-  const timestamps = ipSubmissionTracker.get(ip) || [];
-  const validTimestamps = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
-  
-  if (validTimestamps.length >= MAX_SUBMISSIONS_PER_IP) {
-    return true;
-  }
-
-  validTimestamps.push(now);
-  ipSubmissionTracker.set(ip, validTimestamps);
-  return false;
-}
+import { publicSubmissionRateLimiter, extractClientIp } from '@/lib/security/rate-limit';
+import { sanitizeError } from '@/lib/errors';
 
 export type NominationActionResult = {
   success: boolean;
@@ -30,30 +15,46 @@ export type NominationActionResult = {
   fieldErrors?: Record<string, string[]>;
 };
 
-export async function submitNomination(data: NominationSubmissionInput): Promise<NominationActionResult> {
+/**
+ * Server Action: submitNomination
+ *
+ * Secure server-side handler for the YRL leadership nomination form.
+ * 1. Verifies IP rate limiting via centralized in-memory rate limiter
+ * 2. Checks honeypot anti-bot field
+ * 3. Validates all 35 nomination fields via Zod
+ * 4. Normalizes email and enforces duplicate constraint
+ * 5. Inserts into Supabase via service-role client
+ * 6. Returns database-generated authoritative reference ID (YRL-NOM-YYYY-XXXX)
+ */
+export async function submitNomination(data: unknown): Promise<NominationActionResult> {
   try {
-    // 1. Check IP rate limit
-    const headerList = await headers();
-    const forwardedFor = headerList.get('x-forwarded-for');
-    const ip = forwardedFor ? forwardedFor.split(',')[0].trim() : '127.0.0.1';
+    // 1. IP-based rate limiting check
+    let ip = '127.0.0.1';
+    try {
+      const headerList = await headers();
+      ip = extractClientIp(headerList);
+    } catch {
+      ip = '127.0.0.1';
+    }
 
-    if (isRateLimited(ip)) {
+    const rateLimit = publicSubmissionRateLimiter.check(ip);
+    if (!rateLimit.allowed) {
       return {
         success: false,
-        error: 'Too many submissions received from this network. Please wait a few minutes before trying again.',
+        error: `Too many submissions received from this network. Please wait ${rateLimit.retryAfterSeconds} seconds before trying again.`,
       };
     }
 
-    // 2. Honeypot check (hidden bot field)
-    if (data.honeypot && data.honeypot.trim().length > 0) {
-      // Silently reject bots with generic success to prevent reverse engineering
+    // 2. Honeypot check (hidden anti-bot field)
+    const rawData = (typeof data === 'object' && data !== null) ? (data as Record<string, unknown>) : {};
+    if (typeof rawData.honeypot === 'string' && rawData.honeypot.trim().length > 0) {
+      // Silently reject bots with generic success without persisting to DB or issuing any official reference ID
       return {
         success: true,
-        referenceId: 'REF-' + Math.random().toString(36).substring(2, 10).toUpperCase(),
       };
     }
 
-    // 3. Server-side validation via Zod
+    // 3. Server-side validation via Zod (never trust client input)
     const validationResult = nominationSubmissionSchema.safeParse(data);
     if (!validationResult.success) {
       const flattened = validationResult.error.flatten();
@@ -66,55 +67,57 @@ export async function submitNomination(data: NominationSubmissionInput): Promise
 
     const validatedData = validationResult.data;
     // Strip honeypot before DB insert
-    const { honeypot, ...dbRecord } = validatedData;
+    const { honeypot: _honeypot, ...dbRecord } = validatedData;
 
-    // 4. Initialize Supabase admin client (server-side only)
+    // Normalize email (lowercase and trimmed to match database constraint)
+    const normalizedEmail = dbRecord.email.trim().toLowerCase();
+
+    // 4. Initialize Supabase admin client (server-side only, bypasses RLS safely)
     let supabase;
     try {
       supabase = createAdminClient();
     } catch (err: any) {
-      console.error('Supabase initialization error:', err.message);
+      console.error('[B3 Error] Supabase admin client initialization failed:', err.message);
       return {
         success: false,
-        error: 'System configuration error: Database connection is not yet configured. Please ensure environment variables are set.',
+        error: 'System configuration error: Database connection is not available. Please try again later.',
       };
     }
 
-    // 5. Application-level check for duplicate application
+    // 5. Pre-check for duplicate application (email + position_applied)
     const { data: existingNomination, error: checkError } = await supabase
       .from('nominations')
       .select('id')
-      .eq('email', dbRecord.email.toLowerCase())
+      .eq('email', normalizedEmail)
       .eq('position_applied', dbRecord.position_applied)
       .maybeSingle();
 
     if (checkError) {
-      console.error('Database pre-check error:', checkError);
+      console.error('[B3 Error] Database pre-check error:', checkError.message);
     }
 
     if (existingNomination) {
       return {
         success: false,
-        error: 'You have already submitted a nomination for this position. If you need to make changes or inquire about your status, please contact Youth Republic Leadership.',
+        error: 'You have already submitted a nomination for this position. Each applicant may only apply once per position.',
       };
     }
 
-    // 6. Database Insert
+    // 6. Database Insert (authoritative reference_id is generated database-side)
     const { data: insertedData, error: insertError } = await supabase
       .from('nominations')
       .insert({
         ...dbRecord,
-        email: dbRecord.email.toLowerCase(),
+        email: normalizedEmail,
         status: 'submitted',
-        submitted_at: new Date().toISOString(),
       })
-      .select('id')
+      .select('reference_id')
       .single();
 
     if (insertError) {
-      console.error('Database insert error:', insertError);
+      console.error('[B3 Error] Database insert error code:', insertError.code);
 
-      // Handle unique constraint violation (code 23505)
+      // Handle PostgreSQL unique constraint violation (code 23505) under concurrent race conditions
       if (insertError.code === '23505') {
         return {
           success: false,
@@ -124,19 +127,49 @@ export async function submitNomination(data: NominationSubmissionInput): Promise
 
       return {
         success: false,
-        error: 'Unable to save your nomination at this time. Please check your internet connection and try again.',
+        error: 'Unable to save your nomination at this time. Please check your connection and try again.',
       };
+    }
+
+    if (!insertedData || !insertedData.reference_id) {
+      console.error('[B3 Error] Database insert succeeded but reference_id was not returned.');
+      return {
+        success: false,
+        error: 'Nomination was saved, but reference generation could not be confirmed. Please contact YRL secretariat.',
+      };
+    }
+
+    // 7. Non-blocking email dispatch (graceful degradation)
+    try {
+      const emailResult = await sendNominationEmail(normalizedEmail, {
+        fullName: dbRecord.full_name,
+        referenceId: insertedData.reference_id,
+        positionApplied: dbRecord.position_applied,
+        region: dbRecord.region,
+      });
+
+      if (emailResult.success) {
+        await supabase
+          .from('nominations')
+          .update({
+            email_sent: true,
+            email_sent_at: new Date().toISOString(),
+          })
+          .eq('reference_id', insertedData.reference_id);
+      }
+    } catch (emailErr: any) {
+      // Email failure must never prevent successful nomination submission
+      console.error('[B6 Notice] Non-blocking nomination email dispatch error:', emailErr?.message || emailErr);
     }
 
     return {
       success: true,
-      referenceId: insertedData.id,
+      referenceId: insertedData.reference_id,
     };
   } catch (err: any) {
-    console.error('Unexpected submission error:', err);
     return {
       success: false,
-      error: 'An unexpected error occurred while processing your nomination. Please try again.',
+      error: sanitizeError(err, 'An unexpected error occurred while processing your nomination. Please try again.'),
     };
   }
 }

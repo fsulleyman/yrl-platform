@@ -43,6 +43,7 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { Radio } from '@/components/ui/Radio';
 import { GHANA_REGIONS, NATIONAL_POSITIONS } from '@/data/structure';
 import { nominationSchema } from '@/lib/validations/nomination';
+import { submitNomination } from '@/lib/actions/nominate';
 
 export const EDUCATION_LEVELS = [
   { value: 'High School / WASSCE', label: 'High School / WASSCE' },
@@ -132,6 +133,9 @@ interface FormDataType {
 
   // Step 3: Declaration Agreement
   declaration_agreed: boolean;
+
+  // Anti-abuse honeypot
+  honeypot: string;
 }
 
 const initialFormData: FormDataType = {
@@ -176,6 +180,7 @@ const initialFormData: FormDataType = {
   referee_phone: '',
 
   declaration_agreed: false,
+  honeypot: '',
 };
 
 export default function NominatePage() {
@@ -192,6 +197,10 @@ export default function NominatePage() {
   // Mock submission confirmation data
   const [confirmationNumber, setConfirmationNumber] = useState('');
   const [submissionDate, setSubmissionDate] = useState('');
+
+  // Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   // Age calculation helper
   const calculateAge = (dobString: string): number | null => {
@@ -501,9 +510,10 @@ export default function NominatePage() {
     }
   };
 
-  // Final Confirmation / Mock Submission
-  const handleFinalSubmit = (e: React.FormEvent) => {
+  // Final Confirmation / Server Action Submission
+  const handleFinalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setServerError(null);
 
     if (!formData.declaration_agreed) {
       setErrors((prev) => ({
@@ -514,29 +524,48 @@ export default function NominatePage() {
       return;
     }
 
-    // Full zod schema validation check
-    const zodResult = nominationSchema.safeParse(formData);
+    setIsSubmitting(true);
 
-    if (zodResult.success) {
-      const generatedId = `YRL-NOM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-      const formattedDate = new Date().toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
+    try {
+      const submissionData = {
+        ...formData,
+        region_if_regional_minister:
+          formData.position_applied === 'Interim Regional Minister' && formData.region_if_regional_minister
+            ? formData.region_if_regional_minister
+            : null,
+      };
 
-      setConfirmationNumber(generatedId);
-      setSubmissionDate(formattedDate);
-      setCurrentStep(4);
-      window.scrollTo({ top: 300, behavior: 'smooth' });
-    } else {
-      const fieldErrors: Record<string, string> = {};
-      zodResult.error.issues.forEach((issue) => {
-        if (issue.path[0]) {
-          fieldErrors[issue.path[0].toString()] = issue.message;
+      const result = await submitNomination(submissionData);
+
+      if (result.success && result.referenceId) {
+        const formattedDate = new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+
+        setConfirmationNumber(result.referenceId);
+        setSubmissionDate(formattedDate);
+        setCurrentStep(4);
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+      } else {
+        if (result.fieldErrors) {
+          const mappedErrors: Record<string, string> = {};
+          for (const [key, msgs] of Object.entries(result.fieldErrors)) {
+            if (msgs && msgs.length > 0) {
+              mappedErrors[key] = msgs[0];
+            }
+          }
+          setErrors(mappedErrors);
         }
-      });
-      setErrors(fieldErrors);
+        if (result.error) {
+          setServerError(result.error);
+        }
+      }
+    } catch (err) {
+      setServerError('A network or server error occurred. Please try again later.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -545,6 +574,8 @@ export default function NominatePage() {
     setErrors({});
     setTouched({});
     setConfirmationNumber('');
+    setServerError(null);
+    setIsSubmitting(false);
     setCurrentStep(1);
     window.scrollTo({ top: 200, behavior: 'smooth' });
   };
@@ -1694,6 +1725,18 @@ export default function NominatePage() {
             {/* ================================================================= */}
             {currentStep === 3 && (
               <form onSubmit={handleFinalSubmit} className="space-y-8">
+                {/* Honeypot field (hidden from real users) */}
+                <div className="hidden" aria-hidden="true">
+                  <input
+                    type="text"
+                    name="honeypot"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={formData.honeypot}
+                    onChange={handleInputChange}
+                  />
+                </div>
+
                 {/* Summary Review Card */}
                 <Card variant="bordered" accent="navy" className="bg-white">
                   <CardHeader className="border-b border-slate-100 pb-4">
@@ -1903,6 +1946,16 @@ export default function NominatePage() {
                   </CardContent>
                 </Card>
 
+                {/* Server Error Feedback */}
+                {serverError && (
+                  <Alert variant="error">
+                    <div>
+                      <strong className="block font-bold">Submission Error</strong>
+                      <p className="text-xs mt-1">{serverError}</p>
+                    </div>
+                  </Alert>
+                )}
+
                 {/* Final Submission Feedback */}
                 {Object.keys(errors).length > 0 && (
                   <Alert variant="error">
@@ -1923,6 +1976,7 @@ export default function NominatePage() {
                     type="button"
                     variant="outline"
                     size="lg"
+                    disabled={isSubmitting}
                     onClick={() => {
                       setCurrentStep(2);
                       window.scrollTo({ top: 400, behavior: 'smooth' });
@@ -1937,29 +1991,39 @@ export default function NominatePage() {
                     type="submit"
                     variant="gold"
                     size="lg"
+                    disabled={isSubmitting}
                     className="w-full sm:w-auto font-bold text-base shadow-sm px-10"
                   >
-                    <CheckCircle2 className="w-5 h-5 mr-2" />
-                    <span>Confirm &amp; Complete Nomination</span>
+                    {isSubmitting ? (
+                      <>
+                        <Clock className="w-5 h-5 mr-2 animate-spin" />
+                        <span>Submitting Nomination...</span>
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-5 h-5 mr-2" />
+                        <span>Confirm &amp; Complete Nomination</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
             )}
 
             {/* ================================================================= */}
-            {/* STEP 4: SUCCESSFUL CONFIRMATION VIEW (Client-Side Prototype)       */}
+            {/* STEP 4: SUCCESSFUL CONFIRMATION VIEW                              */}
             {/* ================================================================= */}
             {currentStep === 4 && (
               <div className="space-y-8 animate-fadeIn">
-                {/* Prototype Notice Banner */}
-                <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 flex items-start gap-3 text-xs text-blue-900">
-                  <Sparkles className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                {/* Official Confirmation Banner */}
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3 text-xs text-emerald-950">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                   <div className="space-y-1">
-                    <strong className="text-sm font-bold">Frontend Demonstration Verification</strong>
-                    <p className="text-blue-800 leading-relaxed">
-                      All validation rules from <code>lib/validations/nomination.ts</code> passed
-                      successfully. As part of this frontend-only phase, no data has been saved to
-                      an external server or database.
+                    <strong className="text-sm font-bold">Official Nomination Submitted</strong>
+                    <p className="text-emerald-800 leading-relaxed">
+                      Your nomination has been securely recorded in the official YRL database. Please keep your
+                      Nomination ID (<code>{confirmationNumber}</code>) for your records and reference during the
+                      civic screening process.
                     </p>
                   </div>
                 </div>

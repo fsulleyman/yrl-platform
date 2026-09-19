@@ -17,4 +17,12 @@ export const contactSchema = z.object({
     .max(2000, { message: 'Message cannot exceed 2000 characters' }),
 });
 
+// Schema for the server action with honeypot
+export const contactSubmissionSchema = contactSchema.and(
+  z.object({
+    honeypot: z.string().max(0, { message: 'Spam detected' }).optional().or(z.literal('')),
+  })
+);
+
 export type ContactFormData = z.infer<typeof contactSchema>;
+export type ContactSubmissionInput = z.infer<typeof contactSubmissionSchema>;

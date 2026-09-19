@@ -118,4 +118,12 @@ export const memberSchema = z.object({
   }),
 });
 
+// Schema for the server action with honeypot
+export const memberSubmissionSchema = memberSchema.and(
+  z.object({
+    honeypot: z.string().max(0, { message: 'Spam detected' }).optional().or(z.literal('')),
+  })
+);
+
 export type MemberFormData = z.infer<typeof memberSchema>;
+export type MemberSubmissionInput = z.infer<typeof memberSubmissionSchema>;

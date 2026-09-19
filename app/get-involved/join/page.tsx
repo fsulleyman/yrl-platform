@@ -48,6 +48,7 @@ import {
   ENGAGEMENT_INTEREST_OPTIONS,
   MemberFormData,
 } from '@/lib/validations/member';
+import { registerMember } from '@/lib/actions/member';
 
 interface FormStateType {
   full_name: string;
@@ -65,6 +66,7 @@ interface FormStateType {
   availability: string;
   engagement_interests: string[];
   civic_acknowledgement: boolean;
+  honeypot: string;
 }
 
 const initialFormData: FormStateType = {
@@ -83,6 +85,7 @@ const initialFormData: FormStateType = {
   availability: '',
   engagement_interests: [],
   civic_acknowledgement: false,
+  honeypot: '',
 };
 
 export default function JoinPage() {
@@ -274,8 +277,8 @@ export default function JoinPage() {
     validateField(name as keyof FormStateType);
   };
 
-  // Form submission handler with simulated loading state
-  const handleSubmit = (e: React.FormEvent) => {
+  // Form submission handler with server action integration
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Mark all required fields as touched
@@ -316,28 +319,75 @@ export default function JoinPage() {
       return;
     }
 
-    // Begin simulated loading state
+    // Begin server submission
     setIsSubmitting(true);
     setErrors({});
 
-    // Model A: Simulated submission delay (800ms)
-    setTimeout(() => {
-      const randomCode = Math.floor(1000 + Math.random() * 9000);
-      const generatedMemberId = `YRL-MEM-2026-${randomCode}`;
-      const formattedDate = new Date().toLocaleDateString('en-GB', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
+    try {
+      const result = await registerMember(formData);
 
-      setConfirmationData({
-        memberId: generatedMemberId,
-        registeredAt: formattedDate,
+      if (result.success && result.memberId) {
+        const formattedDate = new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+
+        setConfirmationData({
+          memberId: result.memberId,
+          registeredAt: formattedDate,
+        });
+        setIsSuccess(true);
+        window.scrollTo({ top: 150, behavior: 'smooth' });
+      } else if (result.success) {
+        // Honeypot trap: generic success without official ID
+        const formattedDate = new Date().toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        });
+
+        setConfirmationData({
+          memberId: 'SUBMITTED-FOR-REVIEW',
+          registeredAt: formattedDate,
+        });
+        setIsSuccess(true);
+        window.scrollTo({ top: 150, behavior: 'smooth' });
+      } else {
+        if (result.fieldErrors) {
+          const mappedErrors: Record<string, string> = {};
+          for (const [key, msgs] of Object.entries(result.fieldErrors)) {
+            if (msgs && msgs.length > 0) {
+              mappedErrors[key] = msgs[0];
+            }
+          }
+          setErrors(mappedErrors);
+        }
+        if (result.error) {
+          setErrors((prev) => ({
+            ...prev,
+            _server: result.error!,
+          }));
+        }
+
+        if (errorSummaryRef.current) {
+          errorSummaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          window.scrollTo({ top: 300, behavior: 'smooth' });
+        }
+      }
+    } catch (err) {
+      setErrors({
+        _server: 'A network or server error occurred. Please try again later.',
       });
+      if (errorSummaryRef.current) {
+        errorSummaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        window.scrollTo({ top: 300, behavior: 'smooth' });
+      }
+    } finally {
       setIsSubmitting(false);
-      setIsSuccess(true);
-      window.scrollTo({ top: 150, behavior: 'smooth' });
-    }, 800);
+    }
   };
 
   const handleReset = () => {
@@ -431,6 +481,17 @@ export default function JoinPage() {
                     )}
 
                     <form onSubmit={handleSubmit} noValidate className="space-y-8">
+                      {/* Honeypot field (hidden from real users) */}
+                      <div className="hidden" aria-hidden="true">
+                        <input
+                          type="text"
+                          name="honeypot"
+                          tabIndex={-1}
+                          autoComplete="off"
+                          value={formData.honeypot}
+                          onChange={handleInputChange}
+                        />
+                      </div>
                       {/* SECTION 1: Personal Profile */}
                       <fieldset className="border-b border-slate-100 pb-8">
                         <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
