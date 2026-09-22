@@ -107,3 +107,15 @@ export interface AuditLogRecord {
   user_agent?: string | null;
   created_at: string;
 }
+
+export const ADMIN_ROLES = ['super_admin', 'national_reviewer', 'regional_coordinator'] as const;
+
+export interface AdminUserRecord {
+  id: string;
+  email: string;
+  role: AdminRole;
+  assignedRegion?: string | null;
+  disabled: boolean;
+  createdAt: string;
+  lastSignInAt?: string | null;
+}

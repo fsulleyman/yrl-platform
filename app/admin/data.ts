@@ -1,5 +1,10 @@
 import { createAdminClient } from '@/lib/supabase/server';
-import { type AdminSession, NATIONAL_PORTFOLIOS } from '@/lib/auth/types';
+import {
+  type AdminSession,
+  type AdminRole,
+  type AdminUserRecord,
+  NATIONAL_PORTFOLIOS,
+} from '@/lib/auth/types';
 import { getFilesystemNewsArticles } from '@/lib/news';
 import { maskNominationRecord } from '@/lib/security/privacy';
 
@@ -8,12 +13,13 @@ export interface AdminScopedData {
   members: any[];
   contactMessages: any[];
   newsArticles: any[];
+  adminUsers: AdminUserRecord[];
 }
 
 /**
  * Server-side role-scoped data fetching.
  * Enforces data isolation boundaries based on the authenticated AdminSession:
- * - Super Admin: views all nominations, members, contact messages, and news articles (unmasked).
+ * - Super Admin: views all nominations, members, contact messages, news articles, and administrator accounts.
  * - National Reviewer: restricted to the 11 national portfolios in NATIONAL_PORTFOLIOS with PII masking.
  * - Regional Coordinator: restricted to records matching their assigned region with PII masking.
  */
@@ -21,11 +27,12 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
   const supabase = createAdminClient();
 
   if (session.role === 'super_admin') {
-    const [nomRes, memRes, msgRes, newsRes] = await Promise.all([
+    const [nomRes, memRes, msgRes, newsRes, userListRes] = await Promise.all([
       supabase.from('nominations').select('*').order('created_at', { ascending: false }),
       supabase.from('members').select('*').order('created_at', { ascending: false }),
       supabase.from('contact_messages').select('*').order('created_at', { ascending: false }),
       supabase.from('news_articles').select('*').order('date', { ascending: false }),
+      supabase.auth.admin.listUsers({ page: 1, perPage: 100 }),
     ]);
 
     let news = newsRes.data || [];
@@ -34,11 +41,25 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       news = getFilesystemNewsArticles();
     }
 
+    const adminUsers: AdminUserRecord[] = (userListRes.data?.users || [])
+      .filter((u) => u.app_metadata?.role)
+      .map((u) => ({
+        id: u.id,
+        email: u.email || '',
+        role: (u.app_metadata?.role as AdminRole) || 'national_reviewer',
+        assignedRegion: u.app_metadata?.assigned_region || null,
+        disabled: u.app_metadata?.disabled === true,
+        createdAt: u.created_at,
+        lastSignInAt: u.last_sign_in_at || null,
+      }))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     return {
       nominations: nomRes.data || [],
       members: memRes.data || [],
       contactMessages: msgRes.data || [],
       newsArticles: news,
+      adminUsers,
     };
   }
 
@@ -62,13 +83,14 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       members: [],
       contactMessages: [],
       newsArticles: [],
+      adminUsers: [],
     };
   }
 
   if (session.role === 'regional_coordinator') {
     const assignedRegion = session.assignedRegion;
     if (!assignedRegion) {
-      return { nominations: [], members: [], contactMessages: [], newsArticles: [] };
+      return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [] };
     }
 
     // Scoped by region of residence OR regional deployment choice
@@ -94,8 +116,9 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       members: memRes.data || [],
       contactMessages: [],
       newsArticles: [],
+      adminUsers: [],
     };
   }
 
-  return { nominations: [], members: [], contactMessages: [], newsArticles: [] };
+  return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [] };
 }

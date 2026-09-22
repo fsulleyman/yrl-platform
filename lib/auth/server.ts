@@ -31,6 +31,15 @@ export async function getAdminAuthResult(): Promise<AdminAuthResult> {
     const role = user.app_metadata?.role as AdminRole | undefined;
     const assignedRegion = user.app_metadata?.assigned_region as string | undefined;
 
+    // Immediate revocation check for deactivated administrators
+    if (user.app_metadata?.disabled === true) {
+      return {
+        status: 'unauthorized_role',
+        user: adminUser,
+        detectedRole: 'deactivated',
+      };
+    }
+
     const validRoles: AdminRole[] = ['super_admin', 'national_reviewer', 'regional_coordinator'];
     if (!role || !validRoles.includes(role)) {
       return {

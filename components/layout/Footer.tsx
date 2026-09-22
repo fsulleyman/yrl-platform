@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Shield, ExternalLink } from 'lucide-react';
+import { Shield, ExternalLink, Lock } from 'lucide-react';
 import { FOOTER_NAV, SITE_IDENTITY, SOCIAL_LINKS } from '@/data/navigation';
 import { getContactEmail } from '@/lib/email/config';
 
@@ -122,6 +122,15 @@ export function Footer() {
                   Privacy Policy (Act 843)
                 </Link>
               </li>
+              <li className="pt-1.5 border-t border-white/10">
+                <Link
+                  href="/admin/login"
+                  className="py-1 inline-flex items-center gap-1.5 text-slate-400 hover:text-[#FCD116] transition-colors text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C9A227] rounded-[2px]"
+                >
+                  <Lock className="w-3 h-3 text-[#C9A227]" aria-hidden="true" />
+                  <span>Admin Login</span>
+                </Link>
+              </li>
             </ul>
           </div>
 
@@ -168,9 +177,19 @@ export function Footer() {
           <p>
             &copy; {currentYear} {SITE_IDENTITY.name} ({SITE_IDENTITY.shortName}). All rights reserved.
           </p>
-          <p className="text-center sm:text-right">
-            Independent, voluntary & non-partisan organisation • Republic of Ghana
-          </p>
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-center sm:text-right">
+            <p>
+              Independent, voluntary &amp; non-partisan organisation • Republic of Ghana
+            </p>
+            <span className="text-slate-600 hidden sm:inline" aria-hidden="true">•</span>
+            <Link
+              href="/admin/login"
+              className="text-slate-500 hover:text-slate-300 transition-colors inline-flex items-center gap-1 text-[11px]"
+            >
+              <Lock className="w-2.5 h-2.5 text-slate-400" aria-hidden="true" />
+              <span>Admin Portal</span>
+            </Link>
+          </div>
         </div>
       </div>
     </footer>
