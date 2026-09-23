@@ -140,6 +140,15 @@ export function Header() {
 
           {/* Desktop Action CTAs */}
           <div className="hidden lg:flex items-center gap-2.5">
+            <Link href="/member">
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-[#C9A227]/60 text-[#FCD116] hover:bg-white/10 hover:text-white"
+              >
+                Member Portal
+              </Button>
+            </Link>
             <Link href="/get-involved/join">
               <Button
                 variant="outline"
@@ -258,6 +267,20 @@ export function Header() {
                 <Button variant="gold" fullWidth size="md" className="font-semibold justify-center">
                   <span>Nominate Yourself</span>
                   <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
+              <Link
+                href="/member"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full"
+              >
+                <Button
+                  variant="outline"
+                  fullWidth
+                  size="md"
+                  className="border-[#C9A227]/60 text-[#FCD116] hover:bg-white/10 justify-center"
+                >
+                  Member Portal
                 </Button>
               </Link>
               <Link

@@ -59,6 +59,7 @@ export const FOOTER_NAV = {
   civic: [
     { label: 'Submit Nomination', href: '/get-involved/nominate' },
     { label: 'Join as Member', href: '/get-involved/join' },
+    { label: 'Member Portal', href: '/member' },
     { label: 'Official Notice Board', href: '/notice' },
   ],
   legal: [

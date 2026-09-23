@@ -127,3 +127,56 @@ export const memberSubmissionSchema = memberSchema.and(
 
 export type MemberFormData = z.infer<typeof memberSchema>;
 export type MemberSubmissionInput = z.infer<typeof memberSubmissionSchema>;
+
+/**
+ * B13.4: Permitted Member Self-Service Profile Update Schema
+ * Uses strict object validation to prevent mass-assignment attacks.
+ * Immutable fields (id, member_id, email, full_name, date_of_birth, gender, region,
+ * status, why_join, civic_acknowledgement, timestamps) are strictly excluded and rejected if submitted.
+ */
+export const updateMemberProfileSchema = z
+  .object({
+    phone_number: z
+      .string()
+      .trim()
+      .min(8, { message: 'Enter a valid phone number (minimum 8 digits)' })
+      .max(20, { message: 'Phone number cannot exceed 20 characters' }),
+    whatsapp_number: z
+      .string()
+      .trim()
+      .max(20, { message: 'WhatsApp number cannot exceed 20 characters' })
+      .optional()
+      .nullable()
+      .transform((val) => (val === '' ? null : val)),
+    district_municipality: z
+      .string()
+      .trim()
+      .min(2, { message: 'Enter your district or municipality' })
+      .max(100, { message: 'District cannot exceed 100 characters' }),
+    town_community: z
+      .string()
+      .trim()
+      .min(2, { message: 'Enter your town or community' })
+      .max(100, { message: 'Town cannot exceed 100 characters' }),
+    occupation: z
+      .string()
+      .trim()
+      .min(2, { message: 'Enter your current occupation' })
+      .max(100, { message: 'Occupation cannot exceed 100 characters' }),
+    education_level: z
+      .string()
+      .trim()
+      .min(1, { message: 'Select your highest level of education' })
+      .max(100, { message: 'Education level cannot exceed 100 characters' }),
+    availability: z
+      .string()
+      .trim()
+      .min(1, { message: 'Select your weekly availability' })
+      .max(100, { message: 'Availability cannot exceed 100 characters' }),
+    engagement_interests: z
+      .array(z.string().trim().min(1))
+      .min(1, { message: 'Select at least one area of civic engagement' }),
+  })
+  .strict();
+
+export type UpdateMemberProfileInput = z.infer<typeof updateMemberProfileSchema>;

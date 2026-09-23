@@ -119,3 +119,45 @@ export interface AdminUserRecord {
   createdAt: string;
   lastSignInAt?: string | null;
 }
+
+export interface MemberUser {
+  id: string;
+  email: string;
+}
+
+export interface MemberRecord {
+  id: string;
+  member_id: string;
+  full_name: string;
+  date_of_birth: string;
+  gender: string | null;
+  phone_number: string;
+  whatsapp_number: string | null;
+  email: string;
+  region: string;
+  district_municipality: string;
+  town_community: string;
+  occupation: string;
+  education_level: string;
+  why_join: string;
+  availability: string;
+  engagement_interests: string[];
+  civic_acknowledgement: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemberApplicationSummary {
+  id: string;
+  application_number: string;
+  status: string;
+  submitted_at: string;
+  activated_at?: string | null;
+}
+
+export interface MemberSession {
+  user: MemberUser;
+  member: MemberRecord;
+  application?: MemberApplicationSummary | null;
+}

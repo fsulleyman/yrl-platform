@@ -33,6 +33,7 @@ import {
 import { GHANA_REGIONS, YRL_POSITIONS } from '@/lib/validations/nomination';
 import { NEWS_CATEGORIES, slugify, type NewsCategory } from '@/lib/validations/news';
 import type { NewsArticle } from '@/lib/news';
+import Link from 'next/link';
 import {
   Eye,
   X,
@@ -60,6 +61,8 @@ import {
   Search,
   Filter,
   Download,
+  FileCheck2,
+  Activity,
 } from 'lucide-react';
 
 interface NominationRecord {
@@ -893,6 +896,24 @@ export function AdminDashboard({
                     </button>
                   </>
                 )}
+                <Link
+                  href="/admin/payments"
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-[4px] text-xs font-semibold min-h-[44px] text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <FileCheck2 className="w-4 h-4 text-[#0E1E3B]" /> Payments
+                  </span>
+                </Link>
+                {session.role === 'super_admin' && (
+                  <Link
+                    href="/admin/activity"
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-[4px] text-xs font-semibold min-h-[44px] text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <Activity className="w-4 h-4 text-purple-600" /> Activity Log
+                    </span>
+                  </Link>
+                )}
               </nav>
             </div>
 
@@ -1076,6 +1097,24 @@ export function AdminDashboard({
                 <Shield className="w-4 h-4" />
                 Administrators ({adminUsersList.length})
               </button>
+            )}
+            {/* Payments Link */}
+            <Link
+              href="/admin/payments"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-[4px] transition-colors bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+            >
+              <FileCheck2 className="w-4 h-4 text-[#0E1E3B]" />
+              Payments
+            </Link>
+            {/* Activity Log Link (Super Admin Only) */}
+            {session.role === 'super_admin' && (
+              <Link
+                href="/admin/activity"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-[4px] transition-colors bg-white text-slate-600 hover:bg-slate-50 border border-slate-200"
+              >
+                <Activity className="w-4 h-4 text-purple-600" />
+                Activity Log
+              </Link>
             )}
           </div>
         </div>

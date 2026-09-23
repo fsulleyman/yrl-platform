@@ -14,10 +14,14 @@ import {
   Clock,
   MapPin,
   Briefcase,
-  HeartHandshake,
   BookOpen,
   Loader2,
   HelpCircle,
+  CreditCard,
+  Upload,
+  FileCheck,
+  FileText,
+  AlertTriangle,
 } from 'lucide-react';
 import { Container } from '@/components/ui/Container';
 import { Section } from '@/components/ui/Section';
@@ -38,7 +42,6 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Textarea } from '@/components/ui/Textarea';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { Disclaimer } from '@/components/ui/Disclaimer';
 import {
   memberSchema,
   GHANA_REGIONS,
@@ -46,9 +49,13 @@ import {
   AVAILABILITY_OPTIONS,
   GENDER_OPTIONS,
   ENGAGEMENT_INTEREST_OPTIONS,
-  MemberFormData,
 } from '@/lib/validations/member';
-import { registerMember } from '@/lib/actions/member';
+import {
+  createMembershipApplication,
+  submitApplicantReceipt,
+  initializePaystackPaymentAction,
+} from '@/lib/actions/payment';
+import type { PaymentInstructions } from '@/lib/payment/types';
 
 interface FormStateType {
   full_name: string;
@@ -88,21 +95,70 @@ const initialFormData: FormStateType = {
   honeypot: '',
 };
 
+type Step = 'application' | 'payment_instructions' | 'confirmation';
+
 export default function JoinPage() {
+  const [currentStep, setCurrentStep] = useState<Step>('application');
   const [formData, setFormData] = useState<FormStateType>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [confirmationData, setConfirmationData] = useState<{
-    memberId: string;
-    registeredAt: string;
+
+  // Application & Payment Reference Data from Server
+  const [applicationData, setApplicationData] = useState<{
+    applicationId: string;
+    applicationNumber: string;
+    paymentReference: string;
+    amount: number;
+    currency: string;
+    instructions: PaymentInstructions | null;
+  } | null>(null);
+
+  // Receipt submission state
+  const [receiptForm, setReceiptForm] = useState<{
+    transactionReference: string;
+    claimedPaymentDate: string;
+    file: File | null;
   }>({
-    memberId: '',
-    registeredAt: '',
+    transactionReference: '',
+    claimedPaymentDate: new Date().toISOString().split('T')[0],
+    file: null,
   });
+  const [receiptErrors, setReceiptErrors] = useState<Record<string, string>>({});
+  const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
+
+  // Payment method selection state (Manual Mobile Money is the primary operational method)
+  const [paymentMethodTab, setPaymentMethodTab] = useState<'manual' | 'paystack'>('manual');
+  const [isInitializingPaystack, setIsInitializingPaystack] = useState(false);
+  const [paystackError, setPaystackError] = useState<string | null>(null);
+
+  const handlePaystackCheckout = async () => {
+    if (!applicationData) return;
+    setIsInitializingPaystack(true);
+    setPaystackError(null);
+
+    try {
+      const res = await initializePaystackPaymentAction({
+        applicationId: applicationData.applicationId,
+        email: formData.email,
+      });
+
+      if (res.success && res.data?.authorizationUrl) {
+        window.location.href = res.data.authorizationUrl;
+      } else {
+        setPaystackError(
+          res.error || 'Failed to initialize Paystack checkout. Please try again or use manual transfer.'
+        );
+      }
+    } catch (err) {
+      setPaystackError('An unexpected error occurred connecting to Paystack.');
+    } finally {
+      setIsInitializingPaystack(false);
+    }
+  };
 
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Age calculation helper
   const calculateAge = (dobString: string): number | null => {
@@ -277,8 +333,8 @@ export default function JoinPage() {
     validateField(name as keyof FormStateType);
   };
 
-  // Form submission handler with server action integration
-  const handleSubmit = async (e: React.FormEvent) => {
+  // STEP 1: Application submission handler
+  const handleApplicationSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Mark all required fields as touched
@@ -298,9 +354,7 @@ export default function JoinPage() {
     };
     setTouched((prev) => ({ ...prev, ...touchedAll }));
 
-    // Full schema validation using Zod
     const zodResult = memberSchema.safeParse(formData);
-
     if (!zodResult.success) {
       const fieldErrors: Record<string, string> = {};
       zodResult.error.issues.forEach((issue) => {
@@ -310,7 +364,6 @@ export default function JoinPage() {
       });
       setErrors(fieldErrors);
 
-      // Scroll to error summary
       if (errorSummaryRef.current) {
         errorSummaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
@@ -319,39 +372,15 @@ export default function JoinPage() {
       return;
     }
 
-    // Begin server submission
     setIsSubmitting(true);
     setErrors({});
 
     try {
-      const result = await registerMember(formData);
+      const result = await createMembershipApplication(formData);
 
-      if (result.success && result.memberId) {
-        const formattedDate = new Date().toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
-
-        setConfirmationData({
-          memberId: result.memberId,
-          registeredAt: formattedDate,
-        });
-        setIsSuccess(true);
-        window.scrollTo({ top: 150, behavior: 'smooth' });
-      } else if (result.success) {
-        // Honeypot trap: generic success without official ID
-        const formattedDate = new Date().toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
-
-        setConfirmationData({
-          memberId: 'SUBMITTED-FOR-REVIEW',
-          registeredAt: formattedDate,
-        });
-        setIsSuccess(true);
+      if (result.success && result.data) {
+        setApplicationData(result.data);
+        setCurrentStep('payment_instructions');
         window.scrollTo({ top: 150, behavior: 'smooth' });
       } else {
         if (result.fieldErrors) {
@@ -376,33 +405,113 @@ export default function JoinPage() {
           window.scrollTo({ top: 300, behavior: 'smooth' });
         }
       }
-    } catch (err) {
+    } catch {
       setErrors({
         _server: 'A network or server error occurred. Please try again later.',
       });
       if (errorSummaryRef.current) {
         errorSummaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      } else {
-        window.scrollTo({ top: 300, behavior: 'smooth' });
       }
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // STEP 2: Receipt submission handler
+  const handleReceiptSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!applicationData) return;
+
+    const newReceiptErrors: Record<string, string> = {};
+
+    if (!receiptForm.transactionReference.trim()) {
+      newReceiptErrors.transactionReference = 'Enter the Mobile Money transaction reference / SMS ID.';
+    } else if (receiptForm.transactionReference.trim().length < 4) {
+      newReceiptErrors.transactionReference = 'Transaction reference must be at least 4 characters.';
+    }
+
+    if (!receiptForm.file) {
+      newReceiptErrors.file = 'Please upload a receipt file (JPEG, PNG, WEBP, or PDF).';
+    } else {
+      if (receiptForm.file.size > 5 * 1024 * 1024) {
+        newReceiptErrors.file = 'File size cannot exceed 5MB.';
+      }
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+      if (!allowedTypes.includes(receiptForm.file.type)) {
+        newReceiptErrors.file = 'Receipt must be a JPEG, PNG, WEBP, or PDF document.';
+      }
+    }
+
+    if (Object.keys(newReceiptErrors).length > 0) {
+      setReceiptErrors(newReceiptErrors);
+      return;
+    }
+
+    setIsUploadingReceipt(true);
+    setReceiptErrors({});
+
+    try {
+      const uploadFormData = new FormData();
+      uploadFormData.append('payment_reference', applicationData.paymentReference);
+      uploadFormData.append('transaction_reference', receiptForm.transactionReference.trim());
+      if (receiptForm.claimedPaymentDate) {
+        uploadFormData.append('claimed_payment_date', receiptForm.claimedPaymentDate);
+      }
+      if (receiptForm.file) {
+        uploadFormData.append('receipt_file', receiptForm.file);
+      }
+
+      const result = await submitApplicantReceipt(uploadFormData);
+
+      if (result.success) {
+        setCurrentStep('confirmation');
+        window.scrollTo({ top: 150, behavior: 'smooth' });
+      } else {
+        setReceiptErrors({
+          _server: result.error || 'Failed to submit receipt. Please try again.',
+        });
+      }
+    } catch {
+      setReceiptErrors({
+        _server: 'A network error occurred while uploading your receipt. Please try again.',
+      });
+    } finally {
+      setIsUploadingReceipt(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      setReceiptForm((prev) => ({ ...prev, file: selectedFile }));
+      if (receiptErrors.file) {
+        setReceiptErrors((prev) => {
+          const updated = { ...prev };
+          delete updated.file;
+          return updated;
+        });
+      }
+    }
+  };
+
   const handleReset = () => {
     setFormData(initialFormData);
+    setReceiptForm({
+      transactionReference: '',
+      claimedPaymentDate: new Date().toISOString().split('T')[0],
+      file: null,
+    });
     setErrors({});
+    setReceiptErrors({});
     setTouched({});
-    setIsSuccess(false);
-    setIsSubmitting(false);
-    setConfirmationData({ memberId: '', registeredAt: '' });
+    setApplicationData(null);
+    setCurrentStep('application');
     window.scrollTo({ top: 150, behavior: 'smooth' });
   };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Civic Transparency Notice Banner */}
       <NoticeBanner variant="fullWidth" />
 
       <main id="main-content" className="flex-1">
@@ -422,7 +531,11 @@ export default function JoinPage() {
                     please complete the formal leadership nomination form instead.
                   </p>
                   <Link href="/get-involved/nominate" className="shrink-0">
-                    <Button variant="outline" size="sm" className="text-xs font-semibold border-[#0B1F3A] text-[#0B1F3A] hover:bg-[#0B1F3A] hover:text-white">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs font-semibold border-[#0B1F3A] text-[#0B1F3A] hover:bg-[#0B1F3A] hover:text-white"
+                    >
                       Leadership Nomination <ArrowRight className="w-3.5 h-3.5 ml-1 inline" />
                     </Button>
                   </Link>
@@ -430,12 +543,59 @@ export default function JoinPage() {
               </Alert>
             </div>
 
-            {!isSuccess ? (
+            {/* PROGRESS STEPPER */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between relative">
+                <div className="w-full absolute top-1/2 h-0.5 bg-slate-200 -z-0" />
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                      currentStep === 'application'
+                        ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    1
+                  </div>
+                  <span className="text-xs font-semibold mt-1 text-slate-700">Application</span>
+                </div>
+
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                      currentStep === 'payment_instructions'
+                        ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
+                        : currentStep === 'confirmation'
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    2
+                  </div>
+                  <span className="text-xs font-semibold mt-1 text-slate-700">Payment Evidence</span>
+                </div>
+
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                      currentStep === 'confirmation'
+                        ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
+                        : 'bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    3
+                  </div>
+                  <span className="text-xs font-semibold mt-1 text-slate-700">Verification</span>
+                </div>
+              </div>
+            </div>
+
+            {/* STEP 1: APPLICATION FORM */}
+            {currentStep === 'application' && (
               <>
-                {/* Hero Header */}
                 <div className="text-center mb-10">
                   <Badge variant="gold" className="mb-3 uppercase tracking-wider text-xs font-semibold">
-                    Civic Membership • Open Nationwide
+                    Step 1 of 3 • Civic Registration
                   </Badge>
                   <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-[#0B1F3A] tracking-tight mb-4">
                     Join the Youth Republic Leadership Movement
@@ -446,263 +606,183 @@ export default function JoinPage() {
                   </p>
                 </div>
 
-                {/* Form Card */}
                 <Card className="border border-[#C9A227]/30 shadow-md bg-white">
-                  <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-6">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <CardTitle as="h2" className="text-xl font-heading font-bold text-[#0B1F3A] flex items-center gap-2">
-                        <Users className="w-5 h-5 text-[#C9A227]" aria-hidden="true" />
-                        <span>General Membership Registration</span>
-                      </CardTitle>
-                      <Badge variant="neutral" className="text-xs">
-                        Free Registration • Ages 18–40
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-xs sm:text-sm text-slate-600 mt-1">
-                      Fields marked with an asterisk (<span className="text-red-600">*</span>) are mandatory. Please provide accurate details.
+                  <CardHeader className="border-b border-slate-100 pb-6 bg-slate-50/50">
+                    <CardTitle className="text-xl font-heading font-bold text-[#0B1F3A]">
+                      Membership Application Form
+                    </CardTitle>
+                    <CardDescription className="text-sm text-slate-600">
+                      Please complete all required fields. A one-time membership registration fee of GH₵5.00 applies to support grassroots civic organizing.
                     </CardDescription>
                   </CardHeader>
 
-                  <CardContent className="pt-6 sm:pt-8">
-                    {/* Error Summary Alert */}
+                  <CardContent className="pt-6">
+                    {/* Error Summary */}
                     {Object.keys(errors).length > 0 && (
-                      <div ref={errorSummaryRef} tabIndex={-1} className="mb-8 focus:outline-none">
-                        <Alert
-                          variant="error"
-                          title={`Please review ${Object.keys(errors).length} required item${Object.keys(errors).length > 1 ? 's' : ''}:`}
-                        >
-                          <ul className="list-disc list-inside text-xs sm:text-sm space-y-1 mt-2 text-red-700">
-                            {Object.entries(errors).map(([key, msg]) => (
+                      <div
+                        ref={errorSummaryRef}
+                        role="alert"
+                        tabIndex={-1}
+                        className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg text-red-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                      >
+                        <div className="flex items-center gap-2 mb-2 font-bold text-sm">
+                          <AlertCircle className="w-5 h-5 text-red-600 shrink-0" aria-hidden="true" />
+                          <span>Please correct the errors before submitting:</span>
+                        </div>
+                        <ul className="list-disc list-inside text-xs sm:text-sm space-y-1 text-red-800">
+                          {errors._server && <li className="font-semibold">{errors._server}</li>}
+                          {Object.entries(errors)
+                            .filter(([key]) => key !== '_server')
+                            .map(([key, msg]) => (
                               <li key={key}>{msg}</li>
                             ))}
-                          </ul>
-                        </Alert>
+                        </ul>
                       </div>
                     )}
 
-                    <form onSubmit={handleSubmit} noValidate className="space-y-8">
-                      {/* Honeypot field (hidden from real users) */}
+                    <form onSubmit={handleApplicationSubmit} noValidate className="space-y-8">
+                      {/* Anti-bot Honeypot Field */}
                       <div className="hidden" aria-hidden="true">
+                        <label htmlFor="honeypot">Leave this blank</label>
                         <input
                           type="text"
+                          id="honeypot"
                           name="honeypot"
-                          tabIndex={-1}
-                          autoComplete="off"
                           value={formData.honeypot}
                           onChange={handleInputChange}
+                          tabIndex={-1}
+                          autoComplete="off"
                         />
                       </div>
-                      {/* SECTION 1: Personal Profile */}
-                      <fieldset className="border-b border-slate-100 pb-8">
-                        <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs flex items-center justify-center font-bold">
-                            1
-                          </span>
-                          <span>Personal Profile</span>
-                        </legend>
-                        <p className="text-xs text-slate-500 mb-6 ml-8">
-                          Your legal name and age verification for membership records.
-                        </p>
 
-                        <div className="space-y-5 ml-0 sm:ml-8">
-                          {/* Full Name */}
-                          <div>
+                      {/* SECTION 1: Personal Details */}
+                      <fieldset className="space-y-4">
+                        <legend className="text-base font-heading font-bold text-[#0B1F3A] border-b border-slate-200 pb-2 w-full flex items-center justify-between">
+                          <span>1. Personal Information</span>
+                          <span className="text-xs font-normal text-slate-500">* Required fields</span>
+                        </legend>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="sm:col-span-2">
                             <Label htmlFor="full_name" required>
-                              Full Legal Name
+                              Full Name (as per Ghana Card or Official ID)
                             </Label>
                             <Input
                               id="full_name"
                               name="full_name"
-                              type="text"
-                              autoComplete="name"
                               value={formData.full_name}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
-                              placeholder="e.g. Kwame Mensah Asante"
+                              placeholder="e.g. Kwame Mensah"
+                              error={touched.full_name && errors.full_name}
                               disabled={isSubmitting}
-                              error={touched.full_name && !!errors.full_name}
-                              aria-invalid={touched.full_name && !!errors.full_name}
-                              aria-describedby={errors.full_name ? 'full_name-error' : undefined}
-                              className="mt-1"
+                              autoComplete="name"
                             />
-                            {touched.full_name && errors.full_name && (
-                              <p id="full_name-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.full_name}
+                          </div>
+
+                          <div>
+                            <Label htmlFor="date_of_birth" required>
+                              Date of Birth
+                            </Label>
+                            <Input
+                              type="date"
+                              id="date_of_birth"
+                              name="date_of_birth"
+                              value={formData.date_of_birth}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              error={touched.date_of_birth && errors.date_of_birth}
+                              disabled={isSubmitting}
+                              autoComplete="bday"
+                            />
+                            {calculatedAge !== null && (
+                              <p className="text-xs text-slate-500 mt-1">
+                                Calculated Age: <span className="font-semibold text-slate-700">{calculatedAge} years</span> (Eligible range: 18 – 40)
                               </p>
                             )}
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {/* Date of Birth */}
-                            <div>
-                              <div className="flex items-center justify-between mb-1">
-                                <Label htmlFor="date_of_birth" required>
-                                  Date of Birth
-                                </Label>
-                                {calculatedAge !== null && (
-                                  <span
-                                    className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
-                                      calculatedAge >= 18 && calculatedAge <= 40
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : 'bg-red-100 text-red-800'
-                                    }`}
-                                  >
-                                    Age: {calculatedAge} {calculatedAge >= 18 && calculatedAge <= 40 ? '✓ Eligible' : '✗ 18–40 Only'}
-                                  </span>
-                                )}
-                              </div>
-                              <Input
-                                id="date_of_birth"
-                                name="date_of_birth"
-                                type="date"
-                                value={formData.date_of_birth}
-                                onChange={handleInputChange}
-                                onBlur={handleBlur}
-                                disabled={isSubmitting}
-                                error={touched.date_of_birth && !!errors.date_of_birth}
-                                aria-invalid={touched.date_of_birth && !!errors.date_of_birth}
-                                aria-describedby={errors.date_of_birth ? 'date_of_birth-error' : undefined}
-                              />
-                              <p className="text-[11px] text-slate-500 mt-1">
-                                Per YRL Charter, membership is open to youth aged 18–40.
-                              </p>
-                              {touched.date_of_birth && errors.date_of_birth && (
-                                <p id="date_of_birth-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                  {errors.date_of_birth}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* Gender (Optional) */}
-                            <div>
-                              <Label htmlFor="gender">
-                                Gender <span className="text-slate-500 font-normal text-xs">(Optional)</span>
-                              </Label>
-                              <Select
-                                id="gender"
-                                name="gender"
-                                value={formData.gender}
-                                onChange={handleInputChange}
-                                disabled={isSubmitting}
-                                className="mt-1"
-                              >
-                                <option value="">Select gender (optional)</option>
-                                {GENDER_OPTIONS.map((g) => (
-                                  <option key={g.value} value={g.value}>
-                                    {g.label}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
+                          <div>
+                            <Label htmlFor="gender">Gender</Label>
+                            <Select
+                              id="gender"
+                              name="gender"
+                              value={formData.gender}
+                              onChange={handleInputChange}
+                              disabled={isSubmitting}
+                              options={GENDER_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                              placeholder="Select gender (optional)"
+                            />
                           </div>
                         </div>
                       </fieldset>
 
-                      {/* SECTION 2: Contact Information */}
-                      <fieldset className="border-b border-slate-100 pb-8">
-                        <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs flex items-center justify-center font-bold">
-                            2
-                          </span>
-                          <span>Contact Details</span>
+                      {/* SECTION 2: Contact Details */}
+                      <fieldset className="space-y-4">
+                        <legend className="text-base font-heading font-bold text-[#0B1F3A] border-b border-slate-200 pb-2 w-full">
+                          2. Contact & Communications
                         </legend>
-                        <p className="text-xs text-slate-500 mb-6 ml-8">
-                          Active contact channels for regional communications and event notices.
-                        </p>
 
-                        <div className="space-y-5 ml-0 sm:ml-8">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {/* Phone Number */}
-                            <div>
-                              <Label htmlFor="phone_number" required>
-                                Primary Phone Number
-                              </Label>
-                              <Input
-                                id="phone_number"
-                                name="phone_number"
-                                type="tel"
-                                autoComplete="tel"
-                                value={formData.phone_number}
-                                onChange={handleInputChange}
-                                onBlur={handleBlur}
-                                placeholder="e.g. 024 123 4567"
-                                disabled={isSubmitting}
-                                error={touched.phone_number && !!errors.phone_number}
-                                aria-invalid={touched.phone_number && !!errors.phone_number}
-                                aria-describedby={errors.phone_number ? 'phone_number-error' : undefined}
-                                className="mt-1"
-                              />
-                              {touched.phone_number && errors.phone_number && (
-                                <p id="phone_number-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                  {errors.phone_number}
-                                </p>
-                              )}
-                            </div>
-
-                            {/* WhatsApp Number (Optional) */}
-                            <div>
-                              <Label htmlFor="whatsapp_number">
-                                WhatsApp Number <span className="text-slate-500 font-normal text-xs">(Optional)</span>
-                              </Label>
-                              <Input
-                                id="whatsapp_number"
-                                name="whatsapp_number"
-                                type="tel"
-                                autoComplete="tel"
-                                value={formData.whatsapp_number}
-                                onChange={handleInputChange}
-                                onBlur={handleBlur}
-                                placeholder="e.g. 024 123 4567"
-                                disabled={isSubmitting}
-                                className="mt-1"
-                              />
-                              <p className="text-[11px] text-slate-500 mt-1">Used for regional community announcements.</p>
-                            </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="phone_number" required>
+                              Primary Phone Number (Voice & SMS)
+                            </Label>
+                            <Input
+                              type="tel"
+                              id="phone_number"
+                              name="phone_number"
+                              value={formData.phone_number}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              placeholder="e.g. 0244123456"
+                              error={touched.phone_number && errors.phone_number}
+                              disabled={isSubmitting}
+                              autoComplete="tel"
+                            />
                           </div>
 
-                          {/* Email Address */}
                           <div>
+                            <Label htmlFor="whatsapp_number">WhatsApp Number (if different)</Label>
+                            <Input
+                              type="tel"
+                              id="whatsapp_number"
+                              name="whatsapp_number"
+                              value={formData.whatsapp_number}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              placeholder="e.g. 0501234567"
+                              disabled={isSubmitting}
+                            />
+                          </div>
+
+                          <div className="sm:col-span-2">
                             <Label htmlFor="email" required>
                               Email Address
                             </Label>
                             <Input
+                              type="email"
                               id="email"
                               name="email"
-                              type="email"
-                              autoComplete="email"
                               value={formData.email}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
-                              placeholder="e.g. kwame.asante@example.com"
+                              placeholder="e.g. kwame.mensah@example.com"
+                              error={touched.email && errors.email}
                               disabled={isSubmitting}
-                              error={touched.email && !!errors.email}
-                              aria-invalid={touched.email && !!errors.email}
-                              aria-describedby={errors.email ? 'email-error' : undefined}
-                              className="mt-1"
+                              autoComplete="email"
                             />
-                            {touched.email && errors.email && (
-                              <p id="email-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.email}
-                              </p>
-                            )}
                           </div>
                         </div>
                       </fieldset>
 
-                      {/* SECTION 3: Geographic Location */}
-                      <fieldset className="border-b border-slate-100 pb-8">
-                        <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs flex items-center justify-center font-bold">
-                            3
-                          </span>
-                          <span>Geographic Location</span>
+                      {/* SECTION 3: Location */}
+                      <fieldset className="space-y-4">
+                        <legend className="text-base font-heading font-bold text-[#0B1F3A] border-b border-slate-200 pb-2 w-full">
+                          3. Location & Constituency
                         </legend>
-                        <p className="text-xs text-slate-500 mb-6 ml-8">
-                          Helps assign you to your respective regional and community youth forum.
-                        </p>
 
-                        <div className="space-y-5 ml-0 sm:ml-8">
-                          {/* Region */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div>
                             <Label htmlFor="region" required>
                               Region
@@ -713,128 +793,70 @@ export default function JoinPage() {
                               value={formData.region}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
+                              error={touched.region && errors.region}
                               disabled={isSubmitting}
-                              error={touched.region && !!errors.region}
-                              aria-invalid={touched.region && !!errors.region}
-                              aria-describedby={errors.region ? 'region-error' : undefined}
-                              className="mt-1"
-                            >
-                              <option value="">Select your region (16 Regions of Ghana)</option>
-                              {GHANA_REGIONS.map((region) => (
-                                <option key={region} value={region}>
-                                  {region} Region
-                                </option>
-                              ))}
-                            </Select>
-                            {touched.region && errors.region && (
-                              <p id="region-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.region}
-                              </p>
-                            )}
+                              options={GHANA_REGIONS.map((reg) => ({ value: reg, label: reg }))}
+                              placeholder="Select Region"
+                            />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            {/* District / Municipality */}
-                            <div>
-                              <Label htmlFor="district_municipality" required>
-                                District / Municipality
-                              </Label>
-                              <Input
-                                id="district_municipality"
-                                name="district_municipality"
-                                type="text"
-                                value={formData.district_municipality}
-                                onChange={handleInputChange}
-                                onBlur={handleBlur}
-                                placeholder="e.g. Ayawaso West / Kumasi Metro"
-                                disabled={isSubmitting}
-                                error={touched.district_municipality && !!errors.district_municipality}
-                                aria-invalid={touched.district_municipality && !!errors.district_municipality}
-                                aria-describedby={
-                                  errors.district_municipality ? 'district_municipality-error' : undefined
-                                }
-                                className="mt-1"
-                              />
-                              {touched.district_municipality && errors.district_municipality && (
-                                <p
-                                  id="district_municipality-error"
-                                  role="alert"
-                                  className="text-xs text-red-600 mt-1 font-medium"
-                                >
-                                  {errors.district_municipality}
-                                </p>
-                              )}
-                            </div>
+                          <div>
+                            <Label htmlFor="district_municipality" required>
+                              District / Municipality
+                            </Label>
+                            <Input
+                              id="district_municipality"
+                              name="district_municipality"
+                              value={formData.district_municipality}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              placeholder="e.g. Ayawaso West"
+                              error={touched.district_municipality && errors.district_municipality}
+                              disabled={isSubmitting}
+                            />
+                          </div>
 
-                            {/* Town / Community */}
-                            <div>
-                              <Label htmlFor="town_community" required>
-                                Town / Community
-                              </Label>
-                              <Input
-                                id="town_community"
-                                name="town_community"
-                                type="text"
-                                value={formData.town_community}
-                                onChange={handleInputChange}
-                                onBlur={handleBlur}
-                                placeholder="e.g. Dzorwulu / Bantama"
-                                disabled={isSubmitting}
-                                error={touched.town_community && !!errors.town_community}
-                                aria-invalid={touched.town_community && !!errors.town_community}
-                                aria-describedby={errors.town_community ? 'town_community-error' : undefined}
-                                className="mt-1"
-                              />
-                              {touched.town_community && errors.town_community && (
-                                <p id="town_community-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                  {errors.town_community}
-                                </p>
-                              )}
-                            </div>
+                          <div>
+                            <Label htmlFor="town_community" required>
+                              Town / Community
+                            </Label>
+                            <Input
+                              id="town_community"
+                              name="town_community"
+                              value={formData.town_community}
+                              onChange={handleInputChange}
+                              onBlur={handleBlur}
+                              placeholder="e.g. Dzorwulu"
+                              error={touched.town_community && errors.town_community}
+                              disabled={isSubmitting}
+                            />
                           </div>
                         </div>
                       </fieldset>
 
-                      {/* SECTION 4: Occupation & Education */}
-                      <fieldset className="border-b border-slate-100 pb-8">
-                        <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs flex items-center justify-center font-bold">
-                            4
-                          </span>
-                          <span>Occupation & Education</span>
+                      {/* SECTION 4: Background */}
+                      <fieldset className="space-y-4">
+                        <legend className="text-base font-heading font-bold text-[#0B1F3A] border-b border-slate-200 pb-2 w-full">
+                          4. Education & Vocation
                         </legend>
-                        <p className="text-xs text-slate-500 mb-6 ml-8">
-                          Your vocational background helps match you with relevant civic programs.
-                        </p>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 ml-0 sm:ml-8">
-                          {/* Current Occupation */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="occupation" required>
-                              Current Occupation / Status
+                              Current Occupation / Profession
                             </Label>
                             <Input
                               id="occupation"
                               name="occupation"
-                              type="text"
                               value={formData.occupation}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
-                              placeholder="e.g. Software Developer / Student / Farmer"
+                              placeholder="e.g. Software Engineer, Farmer, Student"
+                              error={touched.occupation && errors.occupation}
                               disabled={isSubmitting}
-                              error={touched.occupation && !!errors.occupation}
-                              aria-invalid={touched.occupation && !!errors.occupation}
-                              aria-describedby={errors.occupation ? 'occupation-error' : undefined}
-                              className="mt-1"
                             />
-                            {touched.occupation && errors.occupation && (
-                              <p id="occupation-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.occupation}
-                              </p>
-                            )}
                           </div>
 
-                          {/* Educational Level */}
                           <div>
                             <Label htmlFor="education_level" required>
                               Highest Level of Education
@@ -845,79 +867,48 @@ export default function JoinPage() {
                               value={formData.education_level}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
+                              error={touched.education_level && errors.education_level}
                               disabled={isSubmitting}
-                              error={touched.education_level && !!errors.education_level}
-                              aria-invalid={touched.education_level && !!errors.education_level}
-                              aria-describedby={errors.education_level ? 'education_level-error' : undefined}
-                              className="mt-1"
-                            >
-                              <option value="">Select educational attainment</option>
-                              {EDUCATION_LEVELS.map((ed) => (
-                                <option key={ed.value} value={ed.value}>
-                                  {ed.label}
-                                </option>
-                              ))}
-                            </Select>
-                            {touched.education_level && errors.education_level && (
-                              <p id="education_level-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.education_level}
-                              </p>
-                            )}
+                              options={EDUCATION_LEVELS.map((ed) => ({ value: ed.value, label: ed.label }))}
+                              placeholder="Select Education Level"
+                            />
                           </div>
                         </div>
                       </fieldset>
 
-                      {/* SECTION 5: Motivation & Availability */}
-                      <fieldset className="border-b border-slate-100 pb-8">
-                        <legend className="text-base font-heading font-bold text-[#0B1F3A] mb-1 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs flex items-center justify-center font-bold">
-                            5
-                          </span>
-                          <span>Civic Motivation & Availability</span>
+                      {/* SECTION 5: Civic Motivation */}
+                      <fieldset className="space-y-4">
+                        <legend className="text-base font-heading font-bold text-[#0B1F3A] border-b border-slate-200 pb-2 w-full">
+                          5. Motivation & Engagement
                         </legend>
-                        <p className="text-xs text-slate-500 mb-6 ml-8">
-                          Tell us what motivates you to participate and how you wish to contribute.
-                        </p>
 
-                        <div className="space-y-6 ml-0 sm:ml-8">
-                          {/* Why Join */}
+                        <div className="space-y-4">
                           <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <Label htmlFor="why_join" required>
-                                Why do you want to join YRL?
-                              </Label>
-                              <span
-                                className={`text-[11px] font-medium ${
-                                  formData.why_join.length >= 20 ? 'text-slate-500' : 'text-amber-700'
-                                }`}
-                              >
-                                {formData.why_join.length} / 1000 chars (min 20)
-                              </span>
-                            </div>
+                            <Label htmlFor="why_join" required>
+                              Why do you want to join Youth Republic Leadership? <span className="text-slate-500 font-normal text-xs">(Min 20 characters)</span>
+                            </Label>
                             <Textarea
                               id="why_join"
                               name="why_join"
-                              rows={4}
                               value={formData.why_join}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
-                              placeholder="Share what inspires you to join this youth movement, the civic issues you care about, or how you hope to contribute to national development..."
+                              placeholder="Share your vision for civic leadership and what motivates you to get involved with YRL..."
+                              rows={4}
+                              error={touched.why_join && errors.why_join}
                               disabled={isSubmitting}
-                              error={touched.why_join && !!errors.why_join}
-                              aria-invalid={touched.why_join && !!errors.why_join}
-                              aria-describedby={errors.why_join ? 'why_join-error' : undefined}
                             />
-                            {touched.why_join && errors.why_join && (
-                              <p id="why_join-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.why_join}
-                              </p>
-                            )}
+                            <p className="text-xs text-slate-500 mt-1 flex justify-between">
+                              <span>Character count: {formData.why_join.length}/1000</span>
+                              {formData.why_join.length > 0 && formData.why_join.length < 20 && (
+                                <span className="text-amber-600 font-medium">Need at least {20 - formData.why_join.length} more characters</span>
+                              )}
+                            </p>
                           </div>
 
-                          {/* Availability */}
                           <div>
                             <Label htmlFor="availability" required>
-                              Weekly Availability Commitment
+                              Weekly Availability
                             </Label>
                             <Select
                               id="availability"
@@ -925,27 +916,13 @@ export default function JoinPage() {
                               value={formData.availability}
                               onChange={handleInputChange}
                               onBlur={handleBlur}
+                              error={touched.availability && errors.availability}
                               disabled={isSubmitting}
-                              error={touched.availability && !!errors.availability}
-                              aria-invalid={touched.availability && !!errors.availability}
-                              aria-describedby={errors.availability ? 'availability-error' : undefined}
-                              className="mt-1"
-                            >
-                              <option value="">Select your estimated availability</option>
-                              {AVAILABILITY_OPTIONS.map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </Select>
-                            {touched.availability && errors.availability && (
-                              <p id="availability-error" role="alert" className="text-xs text-red-600 mt-1 font-medium">
-                                {errors.availability}
-                              </p>
-                            )}
+                              options={AVAILABILITY_OPTIONS.map((av) => ({ value: av.value, label: av.label }))}
+                              placeholder="Select Weekly Commitment"
+                            />
                           </div>
 
-                          {/* Engagement Interests (Checkboxes) */}
                           <div>
                             <Label className="block mb-2">
                               Areas of Civic Interest <span className="text-slate-500 font-normal text-xs">(Select all that apply)</span>
@@ -976,7 +953,7 @@ export default function JoinPage() {
                         </div>
                       </fieldset>
 
-                      {/* SECTION 6: Civic Acknowledgment */}
+                      {/* SECTION 6: Civic Declaration */}
                       <fieldset className="pt-2">
                         <div className="bg-amber-50/60 border border-[#C9A227]/30 rounded-lg p-5">
                           <h4 className="text-sm font-heading font-bold text-[#0B1F3A] mb-2 flex items-center gap-2">
@@ -984,7 +961,8 @@ export default function JoinPage() {
                             <span>Civic Member Declaration</span>
                           </h4>
                           <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                            Youth Republic Leadership is dedicated to servant leadership, ethical civic stewardship, and community empowerment. Membership is 100% free and voluntary.
+                            Youth Republic Leadership is dedicated to servant leadership, ethical civic stewardship, and community empowerment.
+                            A one-time registration fee of GH₵5.00 covers administrative review and civic resource support.
                           </p>
 
                           <div className="flex items-start gap-3">
@@ -997,9 +975,7 @@ export default function JoinPage() {
                               onBlur={handleBlur}
                               disabled={isSubmitting}
                               aria-invalid={touched.civic_acknowledgement && !!errors.civic_acknowledgement}
-                              aria-describedby={
-                                errors.civic_acknowledgement ? 'civic_acknowledgement-error' : undefined
-                              }
+                              aria-describedby={errors.civic_acknowledgement ? 'civic_acknowledgement-error' : undefined}
                               className="rounded border-slate-300 text-[#0B1F3A] focus:ring-[#C9A227] mt-1 shrink-0"
                             />
                             <Label
@@ -1021,7 +997,7 @@ export default function JoinPage() {
                         </div>
                       </fieldset>
 
-                      {/* Submission Controls */}
+                      {/* Controls */}
                       <div className="pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                         <Link href="/" className="w-full sm:w-auto">
                           <Button
@@ -1040,16 +1016,16 @@ export default function JoinPage() {
                           variant="gold"
                           size="lg"
                           disabled={isSubmitting}
-                          className="w-full sm:w-auto min-w-[220px] font-bold shadow-md flex items-center justify-center gap-2"
+                          className="w-full sm:w-auto min-w-[240px] font-bold shadow-md flex items-center justify-center gap-2"
                         >
                           {isSubmitting ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin text-[#0B1F3A]" aria-hidden="true" />
-                              <span>Registering Membership...</span>
+                              <span>Saving Application...</span>
                             </>
                           ) : (
                             <>
-                              <span>Register as Member</span>
+                              <span>Proceed to Payment</span>
                               <ArrowRight className="w-4 h-4 ml-1" aria-hidden="true" />
                             </>
                           )}
@@ -1059,145 +1035,489 @@ export default function JoinPage() {
                   </CardContent>
                 </Card>
               </>
-            ) : (
-              /* SUCCESS CONFIRMATION VIEW */
+            )}
+
+            {/* STEP 2: PAYMENT INSTRUCTIONS & RECEIPT SUBMISSION */}
+            {currentStep === 'payment_instructions' && applicationData && (
+              <div className="animate-in fade-in duration-300 space-y-8">
+                <div className="text-center mb-6">
+                  <Badge variant="gold" className="mb-2 uppercase tracking-wider text-xs font-semibold">
+                    Step 2 of 3 • Membership Fee Payment
+                  </Badge>
+                  <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#0B1F3A]">
+                    Membership Fee Payment
+                  </h2>
+                  <p className="text-sm sm:text-base text-slate-600 max-w-xl mx-auto mt-2 leading-relaxed">
+                    Please complete your membership payment using the provided payment instructions. After payment, upload a clear copy of your payment receipt or proof of payment.
+                  </p>
+                  <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 text-left max-w-xl">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Your payment will be reviewed by YRL before your membership is approved. Uploading a receipt does not automatically make you an official YRL member.</span>
+                  </div>
+                </div>
+
+                {/* Reference Callout Card */}
+                <div className="bg-[#0B1F3A] text-white rounded-lg p-5 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider text-[#FCD116] font-semibold block">
+                      Application Reference Number
+                    </span>
+                    <span className="text-xl sm:text-2xl font-mono font-bold select-all">
+                      {applicationData.applicationNumber}
+                    </span>
+                  </div>
+                  <div className="text-center sm:text-right">
+                    <span className="text-xs uppercase tracking-wider text-slate-300 block">
+                      Payment Reference
+                    </span>
+                    <span className="text-lg font-mono font-bold text-[#FCD116] select-all">
+                      {applicationData.paymentReference}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment Method Selector Tabs */}
+                <div className="flex rounded-lg bg-slate-100 p-1 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodTab('manual')}
+                    className={`flex-1 py-2.5 px-4 text-sm font-semibold rounded-md transition-all flex items-center justify-center gap-2 ${
+                      paymentMethodTab === 'manual'
+                        ? 'bg-white text-[#0B1F3A] shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4 text-amber-600" />
+                    <span>Manual Mobile Money (Upload Receipt)</span>
+                    <Badge variant="default" className="text-[10px] py-0 px-1.5 ml-1 bg-amber-100 text-amber-800 border-amber-300">
+                      Primary
+                    </Badge>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethodTab('paystack')}
+                    className={`flex-1 py-2.5 px-4 text-sm font-semibold rounded-md transition-all flex items-center justify-center gap-2 ${
+                      paymentMethodTab === 'paystack'
+                        ? 'bg-white text-[#0B1F3A] shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <CreditCard className="w-4 h-4 text-blue-600" />
+                    <span>Pay Online (Paystack)</span>
+                  </button>
+                </div>
+
+                {/* OPTION 1: PAYSTACK AUTOMATED PAYMENT */}
+                {paymentMethodTab === 'paystack' && (
+                  <Card className="border border-blue-200 shadow-sm bg-white">
+                    <CardHeader className="bg-blue-50/60 border-b border-blue-100 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-blue-100 text-[#0B1F3A] flex items-center justify-center font-bold">
+                          <CreditCard className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg font-bold text-[#0B1F3A]">
+                            Paystack Instant Online Checkout
+                          </CardTitle>
+                          <CardDescription className="text-xs text-slate-500">
+                            Instant online verification via MTN MoMo, Telecel Cash, AT Money, or Visa/Mastercard
+                          </CardDescription>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pt-6 space-y-5">
+                      <div className="p-4 bg-blue-50/40 rounded-lg border border-blue-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                          <span className="text-xs text-slate-500 uppercase font-semibold block">Required Membership Fee</span>
+                          <span className="text-2xl font-bold text-[#0B1F3A]">
+                            GH₵{applicationData.amount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          <span className="font-semibold block text-slate-800">Authoritative Reference:</span>
+                          <span className="font-mono font-bold text-[#0B1F3A]">{applicationData.paymentReference}</span>
+                        </div>
+                      </div>
+
+                      {paystackError && (
+                        <Alert variant="error" title="Payment Initialization Error">
+                          <p className="text-xs">{paystackError}</p>
+                        </Alert>
+                      )}
+
+                      <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-600 space-y-2 border border-slate-200">
+                        <p className="font-semibold text-slate-800">How Paystack Checkout Works:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Click the checkout button below to launch the encrypted Paystack payment portal.</li>
+                          <li>Select your preferred payment method: Ghanaian Mobile Money wallet or Card.</li>
+                          <li>Follow the prompt on your phone or card provider to authorize GH₵{applicationData.amount.toFixed(2)}.</li>
+                          <li>Your payment will be automatically verified by our gateway webhook upon completion.</li>
+                        </ul>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={handlePaystackCheckout}
+                        disabled={isInitializingPaystack}
+                        className="w-full py-3.5 text-base font-semibold bg-[#0B1F3A] hover:bg-[#14325c] text-white flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        {isInitializingPaystack ? (
+                          <>
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Connecting to Paystack...</span>
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="w-5 h-5" />
+                            <span>Pay GH₵{applicationData.amount.toFixed(2)} via Paystack</span>
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* OPTION 2: MANUAL MOBILE MONEY INSTRUCTIONS & RECEIPT */}
+                {paymentMethodTab === 'manual' && (
+                  <>
+                    {/* Mobile Money Instructions Card */}
+                    {applicationData.instructions && applicationData.instructions.isConfigured ? (
+                      <Card className="border border-slate-200 shadow-sm bg-white">
+                        <CardHeader className="bg-slate-50/80 border-b border-slate-100 pb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-amber-100 text-[#0B1F3A] flex items-center justify-center font-bold">
+                              <CreditCard className="w-5 h-5 text-[#C9A227]" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg font-bold text-[#0B1F3A]">
+                                Official Mobile Money Instructions
+                              </CardTitle>
+                              <CardDescription className="text-xs text-slate-500">
+                                Send the exact registration fee to the authorized YRL account
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+
+                    <CardContent className="pt-6 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-amber-50/50 rounded-lg border border-amber-200/50">
+                        <div>
+                          <span className="text-xs text-slate-500 uppercase font-semibold block">Required Fee</span>
+                          <span className="text-xl font-bold text-[#0B1F3A]">
+                            GH₵{applicationData.amount.toFixed(2)}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs text-slate-500 uppercase font-semibold block">MoMo Number</span>
+                          <span className="text-lg font-mono font-bold text-[#0B1F3A] select-all">
+                            {applicationData.instructions.momoNumber}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-xs text-slate-500 uppercase font-semibold block">Account Name</span>
+                          <span className="text-sm font-semibold text-slate-800">
+                            {applicationData.instructions.accountName}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-4 rounded-md border border-slate-200/60">
+                        <p className="font-semibold text-slate-800">Payment Steps:</p>
+                        <ol className="list-decimal list-inside space-y-1 text-slate-700">
+                          <li>Open your Mobile Money wallet on your phone.</li>
+                          <li>Send <strong>GH₵{applicationData.amount.toFixed(2)}</strong> to <strong>{applicationData.instructions.momoNumber}</strong> ({applicationData.instructions.accountName}).</li>
+                          <li>Use your Application Number <strong>{applicationData.applicationNumber}</strong> as the payment reference or note if supported.</li>
+                          <li>Wait for the SMS confirmation and copy the <strong>Transaction ID / Reference</strong>.</li>
+                          <li>Take a clear screenshot of the SMS or payment confirmation receipt and upload below.</li>
+                        </ol>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  /* Safe Unconfigured State */
+                  <Alert variant="warning" title="Payment Destination Configuration in Progress" className="bg-amber-50/90 border-[#C9A227] text-slate-800">
+                    <p className="text-sm text-slate-700 leading-relaxed mt-1">
+                      Your membership application (<strong>{applicationData.applicationNumber}</strong>) has been successfully recorded in our system.
+                    </p>
+                    <p className="text-sm text-slate-700 leading-relaxed mt-2">
+                      The official YRL Mobile Money payment destination is currently being finalized by the Secretariat. Payment instructions will be made available shortly. Please save your Application Reference number to submit payment once the destination is activated.
+                    </p>
+                    <div className="mt-4 pt-3 border-t border-amber-200/60 flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.print()}
+                        className="text-xs font-semibold"
+                      >
+                        <Printer className="w-3.5 h-3.5 mr-1.5" />
+                        Print / Save Reference
+                      </Button>
+                      <Link href="/">
+                        <Button variant="ghost" size="sm" className="text-xs">
+                          Return to Homepage
+                        </Button>
+                      </Link>
+                    </div>
+                  </Alert>
+                )}
+
+                {/* Receipt Upload Form */}
+                <Card className="border border-[#C9A227]/30 shadow-md bg-white">
+                    <CardHeader className="border-b border-slate-100 pb-4">
+                      <div className="flex items-center gap-2">
+                        <Upload className="w-5 h-5 text-[#C9A227]" />
+                        <CardTitle className="text-lg font-bold text-[#0B1F3A]">
+                          Upload Payment Receipt
+                        </CardTitle>
+                      </div>
+                      <CardDescription className="text-xs text-slate-500">
+                        Submit the transaction details and payment receipt for administrator verification
+                      </CardDescription>
+                    </CardHeader>
+
+                    <CardContent className="pt-6">
+                      {receiptErrors._server && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-900 text-xs sm:text-sm">
+                          {receiptErrors._server}
+                        </div>
+                      )}
+
+                      <form onSubmit={handleReceiptSubmit} className="space-y-6">
+                        <div>
+                          <Label htmlFor="transactionReference" required>
+                            Mobile Money Transaction ID / SMS Reference
+                          </Label>
+                          <Input
+                            id="transactionReference"
+                            name="transactionReference"
+                            value={receiptForm.transactionReference}
+                            onChange={(e) =>
+                              setReceiptForm((prev) => ({ ...prev, transactionReference: e.target.value }))
+                            }
+                            placeholder="e.g. 1729482910 or TXN-492042"
+                            error={receiptErrors.transactionReference}
+                            disabled={isUploadingReceipt}
+                          />
+                          <p className="text-xs text-slate-500 mt-1">
+                            Found in the SMS confirmation from MTN, Vodafone/Telecel, or AirtelTigo.
+                          </p>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="claimedPaymentDate">
+                            Date of Payment
+                          </Label>
+                          <Input
+                            type="date"
+                            id="claimedPaymentDate"
+                            name="claimedPaymentDate"
+                            value={receiptForm.claimedPaymentDate}
+                            onChange={(e) =>
+                              setReceiptForm((prev) => ({ ...prev, claimedPaymentDate: e.target.value }))
+                            }
+                            disabled={isUploadingReceipt}
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="receipt_file" required>
+                            Payment Receipt / Screenshot (JPEG, PNG, WEBP, or PDF • Max 5MB)
+                          </Label>
+                          <input
+                            type="file"
+                            id="receipt_file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            className="hidden"
+                            disabled={isUploadingReceipt}
+                          />
+
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                              receiptErrors.file
+                                ? 'border-red-300 bg-red-50/50'
+                                : receiptForm.file
+                                ? 'border-emerald-400 bg-emerald-50/30'
+                                : 'border-slate-300 hover:border-[#C9A227] bg-slate-50/50'
+                            }`}
+                          >
+                            {receiptForm.file ? (
+                              <div className="flex items-center justify-center gap-3 text-emerald-800">
+                                <FileCheck className="w-8 h-8 text-emerald-600" />
+                                <div className="text-left">
+                                  <p className="text-sm font-semibold truncate max-w-xs">{receiptForm.file.name}</p>
+                                  <p className="text-xs text-slate-500">
+                                    {(receiptForm.file.size / 1024 / 1024).toFixed(2)} MB • Click to change
+                                  </p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <Upload className="w-8 h-8 text-slate-400 mx-auto" />
+                                <p className="text-sm font-semibold text-slate-700">
+                                  Click or drag & drop to upload payment receipt
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  PNG, JPG, WEBP, or PDF up to 5MB
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          {receiptErrors.file && (
+                            <p className="text-xs text-red-600 mt-1 font-medium">{receiptErrors.file}</p>
+                          )}
+                        </div>
+
+                        {/* Critical Evidence Notice */}
+                        <div className="bg-amber-50/70 border border-amber-200 rounded-md p-4 flex items-start gap-3">
+                          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                          <p className="text-xs text-slate-700 leading-relaxed">
+                            <strong>Notice on Payment Verification:</strong> Submitting a transaction receipt serves as evidence of payment for review. It does <strong>not</strong> constitute automatic confirmation or immediate membership activation. The YRL Secretariat verifies all payments manually before official membership approval.
+                          </p>
+                        </div>
+
+                        <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="md"
+                            onClick={() => setCurrentStep('application')}
+                            disabled={isUploadingReceipt}
+                            className="w-full sm:w-auto text-slate-600"
+                          >
+                            Back to Application
+                          </Button>
+
+                          <Button
+                            type="submit"
+                            variant="gold"
+                            size="lg"
+                            disabled={isUploadingReceipt}
+                            className="w-full sm:w-auto min-w-[260px] font-bold shadow-md flex items-center justify-center gap-2"
+                          >
+                            {isUploadingReceipt ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin text-[#0B1F3A]" aria-hidden="true" />
+                                <span>Uploading Receipt...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Submit Receipt for Verification</span>
+                                <ArrowRight className="w-4 h-4 ml-1" aria-hidden="true" />
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </form>
+                    </CardContent>
+                  </Card>
+              </>
+            )}
+          </div>
+        )}
+
+            {/* STEP 3: CONFIRMATION / PENDING VERIFICATION */}
+            {currentStep === 'confirmation' && applicationData && (
               <div className="animate-in fade-in duration-300">
-                <Card className="border-2 border-emerald-500/40 shadow-lg bg-white overflow-hidden">
-                  {/* Decorative Banner Stripe */}
+                <Card className="border-2 border-[#C9A227]/40 shadow-lg bg-white overflow-hidden">
                   <div className="h-2 w-full bg-gradient-to-r from-[#CE1126] via-[#FCD116] to-[#006B3F]" />
 
-                  <CardHeader className="text-center pb-6 pt-8 bg-emerald-50/40 border-b border-emerald-100">
-                    <div className="mx-auto w-16 h-16 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mb-4 border-2 border-emerald-300 shadow-sm">
-                      <CheckCircle2 className="w-10 h-10" aria-hidden="true" />
+                  <CardHeader className="text-center pb-6 pt-8 bg-slate-50 border-b border-slate-100">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mb-4 border-2 border-amber-300 shadow-sm">
+                      <Clock className="w-9 h-9 text-[#C9A227]" aria-hidden="true" />
                     </div>
-                    <Badge variant="success" className="mx-auto mb-2 text-xs uppercase tracking-wider font-semibold">
-                      Civic Registration Confirmed
+                    <Badge variant="warning" className="mx-auto mb-2 text-xs uppercase tracking-wider font-semibold bg-amber-100 text-amber-800 border-amber-200">
+                      Payment Submitted for Verification
                     </Badge>
                     <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#0B1F3A]">
-                      Welcome to Youth Republic Leadership!
+                      Payment Submitted for Verification
                     </h2>
-                    <p className="text-sm sm:text-base text-slate-600 max-w-lg mx-auto mt-2 leading-relaxed">
-                      Thank you for standing up for Ghana’s future. Your general civic membership registration has been
-                      recorded in our foundational register.
+                    <p className="text-sm sm:text-base font-medium text-slate-800 max-w-lg mx-auto mt-2 leading-relaxed">
+                      Your payment evidence has been received and is awaiting verification by YRL.
+                    </p>
+                    <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto mt-1 leading-relaxed">
+                      Your membership is not yet officially activated. You will be notified after the verification and membership approval process is completed.
                     </p>
                   </CardHeader>
 
-                  <CardContent className="pt-8 space-y-8">
-                    {/* Membership ID Callout Box */}
+                  <CardContent className="pt-8 space-y-6">
+                    {/* References Box */}
                     <div className="bg-[#0B1F3A] text-white rounded-lg p-6 text-center relative overflow-hidden shadow-inner">
                       <div className="absolute top-0 right-0 transform translate-x-4 -translate-y-4 opacity-10">
                         <Shield className="w-32 h-32" />
                       </div>
                       <p className="text-xs uppercase tracking-widest text-[#FCD116] font-semibold mb-1">
-                        Official Membership Reference Number
+                        Application Reference Number
                       </p>
-                      <p className="text-2xl sm:text-3xl font-heading font-extrabold tracking-wider text-white select-all">
-                        {confirmationData.memberId}
+                      <p className="text-2xl sm:text-3xl font-mono font-extrabold tracking-wider text-white select-all">
+                        {applicationData.applicationNumber}
                       </p>
-                      <p className="text-xs text-slate-300 mt-2">
-                        Registered on: <span className="font-semibold text-white">{confirmationData.registeredAt}</span>
-                      </p>
-                    </div>
 
-                    {/* Member Summary Card */}
-                    <div className="bg-slate-50 rounded-lg p-5 border border-slate-200">
-                      <h3 className="text-xs font-heading font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">
-                        Registration Details Summary
-                      </h3>
-                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-xs sm:text-sm">
+                      <div className="mt-4 pt-4 border-t border-slate-700/60 flex flex-col sm:flex-row items-center justify-around gap-2 text-xs text-slate-300">
                         <div>
-                          <dt className="text-slate-500 font-medium">Full Name:</dt>
-                          <dd className="text-slate-900 font-semibold">{formData.full_name}</dd>
+                          Payment Reference: <span className="font-mono text-[#FCD116] font-bold">{applicationData.paymentReference}</span>
                         </div>
                         <div>
-                          <dt className="text-slate-500 font-medium">Region:</dt>
-                          <dd className="text-slate-900 font-semibold">{formData.region} Region</dd>
-                        </div>
-                        <div>
-                          <dt className="text-slate-500 font-medium">District & Town:</dt>
-                          <dd className="text-slate-900">
-                            {formData.district_municipality}, {formData.town_community}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-slate-500 font-medium">Contact Phone:</dt>
-                          <dd className="text-slate-900">{formData.phone_number}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-slate-500 font-medium">Email Address:</dt>
-                          <dd className="text-slate-900">{formData.email}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-slate-500 font-medium">Availability:</dt>
-                          <dd className="text-slate-900">{formData.availability}</dd>
-                        </div>
-                      </dl>
-                    </div>
-
-                    {/* Onboarding Next Steps */}
-                    <div>
-                      <h3 className="text-sm font-heading font-bold text-[#0B1F3A] uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <Sparkles className="w-4 h-4 text-[#C9A227]" aria-hidden="true" />
-                        <span>What Happens Next?</span>
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs font-bold flex items-center justify-center mb-2">
-                            1
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 mb-1">Roster Assignment</h4>
-                          <p className="text-xs text-slate-600 leading-relaxed">
-                            Your profile is routed to the interim coordinating secretariat for your region.
-                          </p>
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs font-bold flex items-center justify-center mb-2">
-                            2
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 mb-1">Civic Orientation</h4>
-                          <p className="text-xs text-slate-600 leading-relaxed">
-                            You will receive communications regarding local introductory forums and civic orientations.
-                          </p>
-                        </div>
-                        <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                          <span className="w-6 h-6 rounded-full bg-[#0B1F3A] text-white text-xs font-bold flex items-center justify-center mb-2">
-                            3
-                          </span>
-                          <h4 className="text-xs font-bold text-slate-900 mb-1">Community Action</h4>
-                          <p className="text-xs text-slate-600 leading-relaxed">
-                            Participate in grassroots cleanups, educational programs, and youth leadership initiatives.
-                          </p>
+                          Transaction ID: <span className="font-mono text-white font-semibold">{receiptForm.transactionReference}</span>
                         </div>
                       </div>
                     </div>
+
+                    {/* What Happens Next Card */}
+                    <div className="bg-slate-50 rounded-lg p-5 border border-slate-200/80 space-y-3">
+                      <h4 className="text-sm font-heading font-bold text-[#0B1F3A] flex items-center gap-2">
+                        <HelpCircle className="w-4 h-4 text-[#C9A227]" />
+                        <span>What Happens Next?</span>
+                      </h4>
+                      <ol className="list-decimal list-inside text-xs sm:text-sm text-slate-700 space-y-2 leading-relaxed">
+                        <li>
+                          <strong>Secretariat Verification:</strong> An authorized YRL administrator will verify your Mobile Money transaction and receipt against our official accounts.
+                        </li>
+                        <li>
+                          <strong>Membership Approval:</strong> Once the payment is verified, your membership will be officially activated.
+                        </li>
+                        <li>
+                          <strong>Official Member ID:</strong> An official YRL Membership ID (e.g. <code>YRL-MEM-YYYY-XXXX</code>) will be generated and issued upon activation.
+                        </li>
+                        <li>
+                          <strong>Regional Welcome:</strong> You will be connected with your assigned Regional Coordinator and local civic chapter.
+                        </li>
+                      </ol>
+                    </div>
                   </CardContent>
 
-                  <CardFooter className="bg-slate-50 border-t border-slate-100 p-6 flex flex-wrap items-center justify-between gap-4">
+                  <CardFooter className="pt-2 pb-6 px-6 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
+                      size="md"
                       onClick={() => window.print()}
-                      className="flex items-center gap-1.5 text-xs text-slate-700"
+                      className="w-full sm:w-auto text-xs font-semibold"
                     >
-                      <Printer className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>Print Confirmation</span>
+                      <Printer className="w-4 h-4 mr-2" />
+                      Print / Save Confirmation
                     </Button>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="md"
                         onClick={handleReset}
-                        className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900"
+                        className="w-full sm:w-auto text-xs text-slate-600"
                       >
-                        <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                        <span>Register Another</span>
+                        <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                        Start New Application
                       </Button>
-
-                      <Link href="/">
-                        <Button variant="gold" size="sm" className="text-xs font-bold shadow-sm">
+                      <Link href="/" className="w-full sm:w-auto">
+                        <Button
+                          variant="gold"
+                          size="md"
+                          className="w-full sm:w-auto font-bold text-xs"
+                        >
                           Return to Home
                         </Button>
                       </Link>
@@ -1209,13 +1529,6 @@ export default function JoinPage() {
           </Container>
         </Section>
       </main>
-
-      {/* Footer Civic Disclaimer */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
-        <Disclaimer title="Official Civic Transparency Notice">
-          Youth Republic Leadership is a non-partisan, non-governmental civic leadership organization in Ghana. General membership is voluntary and free. Membership does not constitute public service appointment or government employment.
-        </Disclaimer>
-      </div>
     </div>
   );
 }
