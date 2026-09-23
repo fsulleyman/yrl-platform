@@ -6,7 +6,13 @@ import {
 } from '@/lib/validations/admin';
 import { ADMIN_ROLES, type AdminRole, type AdminUserRecord } from '@/lib/auth/types';
 import { getAdminAuthResult, getAdminSession } from '@/lib/auth/server';
-import { inviteAdminUser, updateAdminUserRole, setAdminUserStatus } from '@/app/admin/actions';
+import {
+  inviteAdminUser,
+  updateAdminUserRole,
+  setAdminUserStatus,
+  mapAuthInvitationError,
+  resolveAdminRedirectUrl,
+} from '@/app/admin/actions';
 import * as supabaseServer from '@/lib/supabase/server';
 import { Footer } from '@/components/layout/Footer';
 
@@ -588,6 +594,262 @@ describe('Phase B12.1.1: Final Admin Ownership, Invitation & Client Handover Sui
       expect(result.error).toBe('Unable to send invitation. Please verify the email address and try again.');
       expect(result.error).not.toContain('postgres');
       expect(result.error).not.toContain('0xdeadbeef');
+    });
+
+    // Req 9b: Specific mapping for Supabase rate limit error (HTTP 429 / over_email_send_rate_limit)
+    it('returns accurate rate limit message when Supabase returns HTTP 429 or over_email_send_rate_limit', async () => {
+      vi.spyOn(supabaseServer, 'createAuthClient').mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'super-1',
+                email: 'superadmin@yrl.org.gh',
+                app_metadata: { role: 'super_admin' },
+              },
+            },
+            error: null,
+          }),
+        },
+      } as any);
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        auth: {
+          admin: {
+            listUsers: vi.fn().mockResolvedValue({
+              data: { users: [] },
+              error: null,
+            }),
+            inviteUserByEmail: vi.fn().mockResolvedValue({
+              data: { user: null },
+              error: {
+                status: 429,
+                code: 'over_email_send_rate_limit',
+                message: 'email rate limit exceeded',
+              },
+            }),
+          },
+        },
+      } as any);
+
+      const result = await inviteAdminUser({
+        email: 'ratelimited@yrl.org.gh',
+        role: 'super_admin',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(
+        'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.'
+      );
+    });
+
+    // Req 9c: Specific mapping for email_exists error (HTTP 422)
+    it('returns accurate account already registered message when Supabase returns email_exists', async () => {
+      vi.spyOn(supabaseServer, 'createAuthClient').mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'super-1',
+                email: 'superadmin@yrl.org.gh',
+                app_metadata: { role: 'super_admin' },
+              },
+            },
+            error: null,
+          }),
+        },
+      } as any);
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        auth: {
+          admin: {
+            listUsers: vi.fn().mockResolvedValue({
+              data: { users: [] },
+              error: null,
+            }),
+            inviteUserByEmail: vi.fn().mockResolvedValue({
+              data: { user: null },
+              error: {
+                status: 422,
+                code: 'email_exists',
+                message: 'A user with this email address has already been registered',
+              },
+            }),
+          },
+        },
+      } as any);
+
+      const result = await inviteAdminUser({
+        email: 'registered@yrl.org.gh',
+        role: 'super_admin',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('An account with this email address is already registered.');
+    });
+
+    // Req 9d: Specific mapping for invalid email error (HTTP 400 / email_address_invalid)
+    it('returns accurate invalid email message when Supabase returns HTTP 400 email_address_invalid', async () => {
+      vi.spyOn(supabaseServer, 'createAuthClient').mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'super-1',
+                email: 'superadmin@yrl.org.gh',
+                app_metadata: { role: 'super_admin' },
+              },
+            },
+            error: null,
+          }),
+        },
+      } as any);
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        auth: {
+          admin: {
+            listUsers: vi.fn().mockResolvedValue({
+              data: { users: [] },
+              error: null,
+            }),
+            inviteUserByEmail: vi.fn().mockResolvedValue({
+              data: { user: null },
+              error: {
+                status: 400,
+                code: 'email_address_invalid',
+                message: 'Email address "invalid@bad-domain.xyz" is invalid',
+              },
+            }),
+          },
+        },
+      } as any);
+
+      const result = await inviteAdminUser({
+        email: 'invalid@bad-domain.xyz',
+        role: 'super_admin',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(
+        'The email address could not be verified by the email service. Please check the spelling and try again.'
+      );
+    });
+
+    // Req 9e: Resend invitation path uses the same safe error mapping
+    it('applies safe error mapping on the resend invitation path for pending users', async () => {
+      vi.spyOn(supabaseServer, 'createAuthClient').mockResolvedValue({
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: {
+              user: {
+                id: 'super-1',
+                email: 'superadmin@yrl.org.gh',
+                app_metadata: { role: 'super_admin' },
+              },
+            },
+            error: null,
+          }),
+        },
+      } as any);
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        auth: {
+          admin: {
+            listUsers: vi.fn().mockResolvedValue({
+              data: {
+                users: [
+                  {
+                    id: 'pending-user-id',
+                    email: 'pending@yrl.org.gh',
+                    app_metadata: {},
+                    invited_at: '2026-09-20T00:00:00Z',
+                  },
+                ],
+              },
+              error: null,
+            }),
+            inviteUserByEmail: vi.fn().mockResolvedValue({
+              data: { user: null },
+              error: {
+                status: 429,
+                code: 'over_email_send_rate_limit',
+                message: 'email rate limit exceeded',
+              },
+            }),
+          },
+        },
+      } as any);
+
+      const result = await inviteAdminUser({
+        email: 'pending@yrl.org.gh',
+        role: 'national_reviewer',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe(
+        'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.'
+      );
+    });
+
+    // Req 9f: Helper unit tests for mapAuthInvitationError
+    it('verifies mapAuthInvitationError directly for various error signatures', async () => {
+      expect(await mapAuthInvitationError({ status: 429 })).toBe(
+        'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.'
+      );
+      expect(await mapAuthInvitationError({ code: 'over_email_send_rate_limit' })).toBe(
+        'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.'
+      );
+      expect(await mapAuthInvitationError({ message: 'Rate limit exceeded for email' })).toBe(
+        'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.'
+      );
+      expect(await mapAuthInvitationError({ code: 'email_exists' })).toBe(
+        'An account with this email address is already registered.'
+      );
+      expect(await mapAuthInvitationError({ message: 'A user with this email address has already been registered' })).toBe(
+        'An account with this email address is already registered.'
+      );
+      expect(await mapAuthInvitationError({ status: 400 })).toBe(
+        'The email address could not be verified by the email service. Please check the spelling and try again.'
+      );
+      expect(await mapAuthInvitationError({ code: 'email_address_invalid' })).toBe(
+        'The email address could not be verified by the email service. Please check the spelling and try again.'
+      );
+      expect(await mapAuthInvitationError(null)).toBe(
+        'Unable to send invitation. Please verify the email address and try again.'
+      );
+      expect(await mapAuthInvitationError({ message: 'Something completely random' })).toBe(
+        'Unable to send invitation. Please verify the email address and try again.'
+      );
+    });
+
+    // Req 9g: Helper unit tests for resolveAdminRedirectUrl
+    it('resolves redirect URLs with proper protocol, fallback, and trailing slash handling', async () => {
+      const origEnv = process.env.NEXT_PUBLIC_SITE_URL;
+
+      try {
+        // Test trailing slash removal on configured HTTPS site URL
+        process.env.NEXT_PUBLIC_SITE_URL = 'https://yrl.org.gh/';
+        const url1 = await resolveAdminRedirectUrl();
+        expect(url1).toBe('https://yrl.org.gh/admin/login');
+
+        // Test configured HTTPS site URL without trailing slash
+        process.env.NEXT_PUBLIC_SITE_URL = 'https://portal.yrl.org.gh';
+        const url2 = await resolveAdminRedirectUrl();
+        expect(url2).toBe('https://portal.yrl.org.gh/admin/login');
+
+        // Test fallback when NEXT_PUBLIC_SITE_URL is undefined
+        delete process.env.NEXT_PUBLIC_SITE_URL;
+        delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+        delete process.env.VERCEL_URL;
+        const url3 = await resolveAdminRedirectUrl();
+        expect(url3).toBe('http://localhost:3000/admin/login');
+      } finally {
+        if (origEnv !== undefined) {
+          process.env.NEXT_PUBLIC_SITE_URL = origEnv;
+        } else {
+          delete process.env.NEXT_PUBLIC_SITE_URL;
+        }
+      }
     });
   });
 

@@ -760,6 +760,103 @@ export async function listAdminUsers(): Promise<MutationResult<AdminUserRecord[]
 }
 
 /**
+ * Safely maps Supabase Auth invitation errors into user-friendly messages.
+ * Never exposes secrets, tokens, internal URLs, or database internals.
+ */
+export async function mapAuthInvitationError(error: any): Promise<string> {
+  if (!error) {
+    return 'Unable to send invitation. Please verify the email address and try again.';
+  }
+
+  const status = error.status || error.statusCode;
+  const code = (error.code || '').toLowerCase();
+  const rawMessage = (error.message || '').toLowerCase();
+
+  // 1. Rate limiting (HTTP 429 or over_email_send_rate_limit)
+  if (status === 429 || code === 'over_email_send_rate_limit' || rawMessage.includes('rate limit')) {
+    return 'Email delivery rate limit exceeded by the authentication service. Please wait a few minutes before trying again.';
+  }
+
+  // 2. Already registered (HTTP 422 or email_exists)
+  if (
+    code === 'email_exists' ||
+    (rawMessage.includes('already') && (rawMessage.includes('registered') || rawMessage.includes('exists')))
+  ) {
+    return 'An account with this email address is already registered.';
+  }
+
+  // 3. Invalid email address (HTTP 400 or email_address_invalid)
+  if (
+    status === 400 ||
+    code === 'email_address_invalid' ||
+    (rawMessage.includes('email') && rawMessage.includes('invalid'))
+  ) {
+    return 'The email address could not be verified by the email service. Please check the spelling and try again.';
+  }
+
+  // Fallback safe generic invitation failure message
+  return 'Unable to send invitation. Please verify the email address and try again.';
+}
+
+/**
+ * Logs invitation errors safely without exposing tokens, passwords, action links, or service role keys.
+ */
+function logInvitationError(action: 'invite' | 'resend', error: any) {
+  console.error(`[Admin User Error] Failed to ${action} user:`, {
+    status: error?.status || error?.statusCode,
+    code: error?.code,
+    message: error?.message,
+  });
+}
+
+/**
+ * Resolves the administrator redirect URL for invitations.
+ * Ensures:
+ * - localhost and 127.0.0.1 use http
+ * - deployed HTTPS environments continue using https
+ * - NEXT_PUBLIC_SITE_URL is respected when configured
+ * - forwarded protocol/host headers are supported
+ * - trailing slashes are removed before appending /admin/login
+ */
+export async function resolveAdminRedirectUrl(): Promise<string> {
+  let siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+
+  if (!siteUrl) {
+    try {
+      const headerList = await headers();
+      const origin = headerList.get('origin');
+      const host = headerList.get('host');
+      const forwardedProto = headerList.get('x-forwarded-proto');
+
+      if (origin && origin !== 'null') {
+        siteUrl = origin;
+      } else if (host) {
+        const isLocal =
+          host.startsWith('localhost') ||
+          host.startsWith('127.0.0.1') ||
+          host.includes('localhost:') ||
+          host.includes('127.0.0.1:');
+        const proto = forwardedProto || (isLocal ? 'http' : 'https');
+        siteUrl = `${proto}://${host}`;
+      }
+    } catch {
+      // Fallback for non-request environments
+    }
+  }
+
+  if (!siteUrl) {
+    siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000';
+  }
+
+  const normalizedSiteUrl = siteUrl.replace(/\/+$/, '');
+  return `${normalizedSiteUrl}/admin/login`;
+}
+
+/**
  * Server Action: Invite a new administrator account (Super Admin only)
  * Uses Supabase Auth inviteUserByEmail so the invited user establishes their OWN password.
  * The system never creates, sees, logs, or returns a password.
@@ -812,30 +909,7 @@ export async function inviteAdminUser(
       };
     }
 
-    let siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-    if (!siteUrl) {
-      try {
-        const headerList = await headers();
-        const origin = headerList.get('origin');
-        const host = headerList.get('host');
-        const proto = headerList.get('x-forwarded-proto') || 'https';
-        if (origin) {
-          siteUrl = origin;
-        } else if (host) {
-          siteUrl = `${proto}://${host}`;
-        }
-      } catch {
-        // Fallback for non-request environments
-      }
-    }
-    if (!siteUrl) {
-      siteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
-        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-        : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'http://localhost:3000';
-    }
-    const redirectTo = `${siteUrl}/admin/login`;
+    const redirectTo = await resolveAdminRedirectUrl();
 
     let targetUserId = '';
 
@@ -854,8 +928,8 @@ export async function inviteAdminUser(
       );
 
       if (reInviteError || !reInviteData.user) {
-        console.error('[Admin User Error] Failed to resend invitation:', reInviteError?.message);
-        return { success: false, error: 'Unable to send invitation. Please verify the email address and try again.' };
+        logInvitationError('resend', reInviteError);
+        return { success: false, error: await mapAuthInvitationError(reInviteError) };
       }
       targetUserId = existingUser.id;
     } else {
@@ -872,11 +946,8 @@ export async function inviteAdminUser(
       );
 
       if (inviteError || !inviteData.user) {
-        console.error('[Admin User Error] Failed to invite user:', inviteError?.message);
-        if (inviteError?.message?.toLowerCase().includes('already') && inviteError?.message?.toLowerCase().includes('registered')) {
-          return { success: false, error: 'An administrator with this email already exists.' };
-        }
-        return { success: false, error: 'Unable to send invitation. Please verify the email address and try again.' };
+        logInvitationError('invite', inviteError);
+        return { success: false, error: await mapAuthInvitationError(inviteError) };
       }
       targetUserId = inviteData.user.id;
     }
