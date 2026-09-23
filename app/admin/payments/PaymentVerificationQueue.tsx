@@ -208,38 +208,16 @@ export function PaymentVerificationQueue({
       {/* Financial Summary & Filtered Queue Sections */}
       <div className="space-y-4">
         {/* FINANCIAL SUMMARY: Total Amount Received */}
-        <div className="bg-[#0E1E3B] text-white p-5 rounded-[4px] border border-[#0E1E3B] shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wider text-[#FCD116] font-bold">
-                Total Amount Received
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Verified Payments
-              </span>
-            </div>
-            <div className="text-3xl sm:text-4xl font-extrabold text-white mt-1.5 tracking-tight font-mono">
-              GH₵{totalAmountReceived.toFixed(2)}
-            </div>
-            <p className="text-xs text-slate-300 mt-1">
-              Authoritative revenue from {verifiedPaymentsCount} verified {verifiedPaymentsCount === 1 ? 'transaction' : 'transactions'}
-              {session.role === 'regional_coordinator' && session.assignedRegion
-                ? ` in ${session.assignedRegion} Region`
-                : ' nationally'}
-            </p>
+        <div className="bg-[#0E1E3B] text-white p-5 rounded-[4px] border border-[#0E1E3B] shadow-sm">
+          <span className="text-xs uppercase tracking-wider text-[#FCD116] font-bold block">
+            Total Amount Received
+          </span>
+          <div className="text-3xl sm:text-4xl font-extrabold text-white mt-1.5 tracking-tight font-mono">
+            GH₵{totalAmountReceived.toFixed(2)}
           </div>
-
-          <div className="md:text-right border-t md:border-t-0 pt-3 md:pt-0 border-white/10">
-            <span className="text-[11px] text-slate-300 uppercase tracking-wider block font-semibold">
-              Calculation Rule
-            </span>
-            <span className="text-xs font-mono text-[#FCD116] font-bold block mt-0.5">
-              SUM(payment.amount) WHERE status = &apos;successful&apos;
-            </span>
-            <p className="text-[10px] text-slate-400 mt-1 max-w-xs md:ml-auto">
-              Excludes pending, rejected, and unverified records. Authoritative and independent of queue filter.
-            </p>
-          </div>
+          <p className="text-xs text-slate-300 mt-1">
+            {verifiedPaymentsCount} verified {verifiedPaymentsCount === 1 ? 'payment' : 'payments'}
+          </p>
         </div>
 
         {/* FILTERED QUEUE STATISTICS: Current Table View */}
