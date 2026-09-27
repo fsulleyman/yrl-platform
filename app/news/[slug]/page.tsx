@@ -173,8 +173,9 @@ export default async function ArticleDetailPage({ params }: PageProps) {
                       <strong className="block font-heading font-bold text-[#0B1F3A] mb-1">
                         Civic Integrity & Public Transparency
                       </strong>
-                      All applications, nominations, and general memberships in Youth Republic Leadership are 100% free.
-                      YRL never solicits application fees, registration fees, or processing charges. Interim roles are
+                      Interim leadership nominations in Youth Republic Leadership are 100% free of charge.
+                      General civic membership requires payment of the official YRL Membership Fee of GH₵5.00. No
+                      unauthorized agent or third party is permitted to collect cash or personal payments. Interim roles are
                       strictly voluntary and non-governmental.
                     </div>
                   </div>

@@ -34,6 +34,8 @@ import {
   formatMembersCsv,
   formatInquiriesCsv,
   formatReviewsCsv,
+  formatPaymentsCsv,
+  formatApplicationsCsv,
 } from '@/lib/export/csv';
 import {
   createNewsArticleSchema,
@@ -1307,6 +1309,9 @@ export async function exportAdminData(
   if (dataset === 'members' && session.role === 'national_reviewer') {
     return { success: false, error: 'Unauthorized: National Reviewers do not have access to member records.' };
   }
+  if ((dataset === 'payments' || dataset === 'applications') && session.role === 'national_reviewer') {
+    return { success: false, error: 'Unauthorized: National Reviewers do not have access to financial or application records.' };
+  }
   if (dataset === 'inquiries' && session.role !== 'super_admin') {
     return { success: false, error: 'Unauthorized: Only Super Administrators have access to export inquiry records.' };
   }
@@ -1452,6 +1457,129 @@ export async function exportAdminData(
       const records = reviews || [];
       recordCount = records.length;
       csvContent = formatReviewsCsv(records);
+    } else if (dataset === 'payments') {
+      let query: any;
+
+      if (session.role === 'super_admin') {
+        if (requestedRegion) {
+          query = supabase
+            .from('payments')
+            .select(`
+              id,
+              payment_reference,
+              transaction_reference,
+              amount,
+              currency,
+              status,
+              claimed_payment_date,
+              verified_at,
+              verified_by,
+              rejection_reason,
+              created_at,
+              membership_applications!inner (
+                application_number,
+                full_name,
+                region
+              )
+            `)
+            .eq('membership_applications.region', requestedRegion);
+          scopeLabel = `region_${requestedRegion}`;
+          filename = `yrl-payments-${requestedRegion.toLowerCase().replace(/\s+/g, '-')}-${dateStr}.csv`;
+        } else {
+          query = supabase
+            .from('payments')
+            .select(`
+              id,
+              payment_reference,
+              transaction_reference,
+              amount,
+              currency,
+              status,
+              claimed_payment_date,
+              verified_at,
+              verified_by,
+              rejection_reason,
+              created_at,
+              membership_applications (
+                application_number,
+                full_name,
+                region
+              )
+            `);
+          scopeLabel = 'all_regions';
+          filename = `yrl-payments-all-${dateStr}.csv`;
+        }
+      } else if (session.role === 'regional_coordinator') {
+        const assignedRegion = session.assignedRegion;
+        if (!assignedRegion) {
+          return { success: false, error: 'Regional Coordinator has no assigned region configured.' };
+        }
+        query = supabase
+          .from('payments')
+          .select(`
+            id,
+            payment_reference,
+            transaction_reference,
+            amount,
+            currency,
+            status,
+            claimed_payment_date,
+            verified_at,
+            verified_by,
+            rejection_reason,
+            created_at,
+            membership_applications!inner (
+              application_number,
+              full_name,
+              region
+            )
+          `)
+          .eq('membership_applications.region', assignedRegion);
+        scopeLabel = `region_${assignedRegion}`;
+        filename = `yrl-payments-${assignedRegion.toLowerCase().replace(/\s+/g, '-')}-${dateStr}.csv`;
+      }
+
+      const { data: payments, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        console.error('[Export Error] Failed to query payments:', error.message);
+        return { success: false, error: 'Failed to retrieve payment records for export.' };
+      }
+
+      const records = payments || [];
+      recordCount = records.length;
+      csvContent = formatPaymentsCsv(records);
+    } else if (dataset === 'applications') {
+      let query = supabase.from('membership_applications').select('*');
+
+      if (session.role === 'super_admin') {
+        if (requestedRegion) {
+          query = query.eq('region', requestedRegion);
+          scopeLabel = `region_${requestedRegion}`;
+          filename = `yrl-applications-${requestedRegion.toLowerCase().replace(/\s+/g, '-')}-${dateStr}.csv`;
+        } else {
+          query = query;
+          scopeLabel = 'all_regions';
+          filename = `yrl-applications-all-${dateStr}.csv`;
+        }
+      } else if (session.role === 'regional_coordinator') {
+        const assignedRegion = session.assignedRegion;
+        if (!assignedRegion) {
+          return { success: false, error: 'Regional Coordinator has no assigned region configured.' };
+        }
+        query = query.eq('region', assignedRegion);
+        scopeLabel = `region_${assignedRegion}`;
+        filename = `yrl-applications-${assignedRegion.toLowerCase().replace(/\s+/g, '-')}-${dateStr}.csv`;
+      }
+
+      const { data: applications, error } = await query.order('created_at', { ascending: false });
+      if (error) {
+        console.error('[Export Error] Failed to query applications:', error.message);
+        return { success: false, error: 'Failed to retrieve application records for export.' };
+      }
+
+      const records = applications || [];
+      recordCount = records.length;
+      csvContent = formatApplicationsCsv(records);
     } else {
       return { success: false, error: 'Unrecognized export dataset requested.' };
     }

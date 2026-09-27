@@ -392,7 +392,7 @@ export default function HomePage() {
                   </li>
                   <li className="flex items-start gap-2.5">
                     <CheckCircle2 className="w-4 h-4 text-[#0B1F3A] shrink-0 mt-0.5" />
-                    <span>100% free registration with voluntary engagement</span>
+                    <span>YRL Membership Fee — GH₵5.00</span>
                   </li>
                 </ul>
               </CardContent>
@@ -440,11 +440,10 @@ export default function HomePage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="p-4 rounded-lg bg-white/5 border border-white/10 space-y-1.5">
                   <span className="text-xs font-bold text-[#FCD116] uppercase tracking-wide block">
-                    100% Free Process
+                    100% Free Nominations • GH₵5.00 Membership Fee
                   </span>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Nominations and registrations are strictly free. No agent or representative is
-                    authorized to demand or accept fees.
+                    Nominations are strictly free. Civic membership requires payment of the official GH₵5.00 membership fee via official channels. No agent or representative is authorized to accept cash.
                   </p>
                 </div>
 

@@ -14,6 +14,7 @@ export interface AdminScopedData {
   contactMessages: any[];
   newsArticles: any[];
   adminUsers: AdminUserRecord[];
+  pendingPaymentsCount?: number;
 }
 
 /**
@@ -27,12 +28,13 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
   const supabase = createAdminClient();
 
   if (session.role === 'super_admin') {
-    const [nomRes, memRes, msgRes, newsRes, userListRes] = await Promise.all([
+    const [nomRes, memRes, msgRes, newsRes, userListRes, pendingPayRes] = await Promise.all([
       supabase.from('nominations').select('*').order('created_at', { ascending: false }),
       supabase.from('members').select('*').order('created_at', { ascending: false }),
       supabase.from('contact_messages').select('*').order('created_at', { ascending: false }),
       supabase.from('news_articles').select('*').order('date', { ascending: false }),
       supabase.auth.admin.listUsers({ page: 1, perPage: 100 }),
+      supabase.from('payments').select('id', { count: 'exact', head: true }).eq('status', 'pending_verification'),
     ]);
 
     let news = newsRes.data || [];
@@ -60,6 +62,7 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       contactMessages: msgRes.data || [],
       newsArticles: news,
       adminUsers,
+      pendingPaymentsCount: pendingPayRes.count ?? 0,
     };
   }
 
@@ -84,17 +87,18 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       contactMessages: [],
       newsArticles: [],
       adminUsers: [],
+      pendingPaymentsCount: 0,
     };
   }
 
   if (session.role === 'regional_coordinator') {
     const assignedRegion = session.assignedRegion;
     if (!assignedRegion) {
-      return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [] };
+      return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [], pendingPaymentsCount: 0 };
     }
 
     // Scoped by region of residence OR regional deployment choice
-    const [nomRes, memRes] = await Promise.all([
+    const [nomRes, memRes, pendingPayRes] = await Promise.all([
       supabase
         .from('nominations')
         .select('*')
@@ -105,6 +109,11 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
         .select('*')
         .eq('region', assignedRegion)
         .order('created_at', { ascending: false }),
+      supabase
+        .from('payments')
+        .select('id, membership_applications!inner(region)', { count: 'exact', head: true })
+        .eq('status', 'pending_verification')
+        .eq('membership_applications.region', assignedRegion),
     ]);
 
     const maskedNominations = (nomRes.data || []).map((n) =>
@@ -117,8 +126,9 @@ export async function getAdminScopedData(session: AdminSession): Promise<AdminSc
       contactMessages: [],
       newsArticles: [],
       adminUsers: [],
+      pendingPaymentsCount: pendingPayRes.count ?? 0,
     };
   }
 
-  return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [] };
+  return { nominations: [], members: [], contactMessages: [], newsArticles: [], adminUsers: [], pendingPaymentsCount: 0 };
 }

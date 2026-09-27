@@ -6,6 +6,8 @@ import {
   formatMembersCsv,
   formatInquiriesCsv,
   formatReviewsCsv,
+  formatPaymentsCsv,
+  formatApplicationsCsv,
 } from '@/lib/export/csv';
 import {
   deleteAdminUserSchema,
@@ -218,6 +220,8 @@ describe('Phase B12.2: Admin Permissions, Scoping, CSV Export & Permanent Deleti
       expect(exportAdminDataSchema.safeParse({ dataset: 'members' }).success).toBe(true);
       expect(exportAdminDataSchema.safeParse({ dataset: 'inquiries' }).success).toBe(true);
       expect(exportAdminDataSchema.safeParse({ dataset: 'reviews' }).success).toBe(true);
+      expect(exportAdminDataSchema.safeParse({ dataset: 'payments' }).success).toBe(true);
+      expect(exportAdminDataSchema.safeParse({ dataset: 'applications' }).success).toBe(true);
       expect(exportAdminDataSchema.safeParse({ dataset: 'passwords' }).success).toBe(false);
     });
   });
@@ -663,6 +667,170 @@ describe('Phase B12.2: Admin Permissions, Scoping, CSV Export & Permanent Deleti
       // Formula triggers must be prefixed with a single quote
       expect(csv).toContain("\"'=cmd|’ /C calc’!A0\"");
       expect(csv).toContain("\"'@SUM(1+1)*cmd\"");
+    });
+
+    it('exports payments dataset with strict Super Admin access and audit logging', async () => {
+      vi.spyOn(authServer, 'getAdminSession').mockResolvedValue({
+        user: { id: 'admin-1', email: 'owner@yrl.org.gh' },
+        role: 'super_admin' as const,
+      });
+
+      const mockInsertAudit = vi.fn().mockResolvedValue({ error: null });
+      const mockPayments = [
+        {
+          id: 'pay-1',
+          payment_reference: 'YRL-PAY-2026-0001',
+          transaction_reference: 'TXN-998877',
+          amount: 50.0,
+          currency: 'GHS',
+          status: 'successful',
+          claimed_payment_date: '2026-09-20',
+          verified_at: '2026-09-21T10:00:00Z',
+          verified_by: 'owner@yrl.org.gh',
+          rejection_reason: null,
+          created_at: '2026-09-20T08:00:00Z',
+          membership_applications: {
+            application_number: 'YRL-APP-2026-0001',
+            full_name: 'Kwame Mensah',
+            region: 'Greater Accra',
+          },
+        },
+      ];
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        from: vi.fn((table: string) => {
+          if (table === 'payments') {
+            return {
+              select: vi.fn().mockReturnValue({
+                order: vi.fn().mockResolvedValue({
+                  data: mockPayments,
+                  error: null,
+                }),
+              }),
+            };
+          }
+          if (table === 'audit_logs') return { insert: mockInsertAudit };
+          return { select: vi.fn() };
+        }),
+      } as any);
+
+      const result = await exportAdminData({ dataset: 'payments' });
+      expect(result.success).toBe(true);
+      expect(result.data?.recordCount).toBe(1);
+      expect(result.data?.filename).toContain('yrl-payments-all-');
+      expect(result.data?.csvContent).toContain('YRL-PAY-2026-0001');
+      expect(result.data?.csvContent).toContain('Kwame Mensah');
+      expect(result.data?.csvContent).toContain('50.00');
+
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entity_type: 'export',
+          entity_id: 'payments',
+          action: 'data_exported',
+          new_state: expect.objectContaining({
+            dataset: 'payments',
+            scope: 'all_regions',
+            record_count: 1,
+          }),
+        })
+      );
+    });
+
+    it('enforces Regional Coordinator isolation for payments export', async () => {
+      vi.spyOn(authServer, 'getAdminSession').mockResolvedValue({
+        user: { id: 'coord-1', email: 'coord.ashanti@yrl.org.gh' },
+        role: 'regional_coordinator' as const,
+        assignedRegion: 'Ashanti',
+      });
+
+      const mockOrder = vi.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'pay-ashanti',
+            payment_reference: 'YRL-PAY-2026-0002',
+            transaction_reference: 'TXN-ASH-01',
+            amount: 50.0,
+            currency: 'GHS',
+            status: 'successful',
+            claimed_payment_date: '2026-09-21',
+            verified_at: '2026-09-22T09:00:00Z',
+            verified_by: 'coord.ashanti@yrl.org.gh',
+            rejection_reason: null,
+            created_at: '2026-09-21T08:00:00Z',
+            membership_applications: {
+              application_number: 'YRL-APP-2026-0002',
+              full_name: 'Akosua Serwaa',
+              region: 'Ashanti',
+            },
+          },
+        ],
+        error: null,
+      });
+
+      const mockEq = vi.fn().mockReturnValue({ order: mockOrder });
+      const mockSelect = vi.fn().mockReturnValue({ eq: mockEq });
+
+      vi.spyOn(supabaseServer, 'createAdminClient').mockReturnValue({
+        from: vi.fn((table: string) => {
+          if (table === 'payments') return { select: mockSelect };
+          if (table === 'audit_logs') return { insert: vi.fn().mockResolvedValue({ error: null }) };
+          return { select: vi.fn() };
+        }),
+      } as any);
+
+      const result = await exportAdminData({ dataset: 'payments' });
+      expect(result.success).toBe(true);
+      expect(result.data?.filename).toContain('yrl-payments-ashanti-');
+      expect(mockEq).toHaveBeenCalledWith('membership_applications.region', 'Ashanti');
+    });
+
+    it('rejects National Reviewers from exporting payments or applications', async () => {
+      vi.spyOn(authServer, 'getAdminSession').mockResolvedValue({
+        user: { id: 'rev-1', email: 'reviewer@yrl.org.gh' },
+        role: 'national_reviewer' as const,
+      });
+
+      const paymentResult = await exportAdminData({ dataset: 'payments' });
+      expect(paymentResult.success).toBe(false);
+      expect(paymentResult.error).toContain('Unauthorized');
+
+      const appResult = await exportAdminData({ dataset: 'applications' });
+      expect(appResult.success).toBe(false);
+      expect(appResult.error).toContain('Unauthorized');
+    });
+
+    it('neutralizes formula injection in payment and application exports', () => {
+      const dangerousPayment = {
+        payment_reference: '=SUM(A1:A10)',
+        transaction_reference: '+233240001111',
+        amount: 50.0,
+        currency: 'GHS',
+        status: 'successful',
+        membership_applications: {
+          application_number: '-cmd',
+          full_name: '@InjectedName',
+          region: 'Greater Accra',
+        },
+      };
+
+      const dangerousApp = {
+        application_number: '=1+1',
+        status: 'pending_payment',
+        full_name: '+DangerousName',
+        why_join: '-cmd|’ /C calc’!A0',
+        region: 'Central',
+      };
+
+      const payCsv = formatPaymentsCsv([dangerousPayment]);
+      expect(payCsv).toContain("\"'=SUM(A1:A10)\"");
+      expect(payCsv).toContain("\"'+233240001111\"");
+      expect(payCsv).toContain("\"'-cmd\"");
+      expect(payCsv).toContain("\"'@InjectedName\"");
+
+      const appCsv = formatApplicationsCsv([dangerousApp]);
+      expect(appCsv).toContain("\"'=1+1\"");
+      expect(appCsv).toContain("\"'+DangerousName\"");
+      expect(appCsv).toContain("\"'-cmd|’ /C calc’!A0\"");
     });
   });
 });

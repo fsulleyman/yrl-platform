@@ -138,7 +138,7 @@ export async function getMemberAuthResult(): Promise<MemberAuthResult> {
     if (member?.id) {
       const { data: appData } = await adminClient
         .from('membership_applications')
-        .select('id, application_number, status, submitted_at, activated_at')
+        .select('id, application_number, status, submitted_at, activated_at, rejection_reason')
         .eq('member_id', member.id)
         .maybeSingle();
       if (appData) {
@@ -149,7 +149,7 @@ export async function getMemberAuthResult(): Promise<MemberAuthResult> {
     if (!application) {
       const { data: appData } = await adminClient
         .from('membership_applications')
-        .select('id, application_number, status, submitted_at, activated_at')
+        .select('id, application_number, status, submitted_at, activated_at, rejection_reason')
         .eq('email', normalizedEmail)
         .order('submitted_at', { ascending: false })
         .limit(1)

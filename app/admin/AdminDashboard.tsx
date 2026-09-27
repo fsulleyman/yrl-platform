@@ -63,6 +63,9 @@ import {
   Download,
   FileCheck2,
   Activity,
+  LayoutDashboard,
+  ArrowRight,
+  Clock,
 } from 'lucide-react';
 
 interface NominationRecord {
@@ -139,6 +142,7 @@ interface AdminDashboardProps {
   initialContactMessages?: ContactMessageRecord[];
   initialNewsArticles?: NewsArticle[];
   initialAdminUsers?: AdminUserRecord[];
+  pendingPaymentsCount?: number;
 }
 
 export function AdminDashboard({
@@ -148,11 +152,26 @@ export function AdminDashboard({
   initialContactMessages = [],
   initialNewsArticles = [],
   initialAdminUsers = [],
+  pendingPaymentsCount = 0,
 }: AdminDashboardProps) {
-  const [activeTab, setActiveTab] = useState<'nominations' | 'members' | 'messages' | 'news' | 'administrators'>('nominations');
+  const [activeTab, setActiveTab] = useState<'overview' | 'nominations' | 'members' | 'messages' | 'news' | 'administrators'>('overview');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [nominationsList, setNominationsList] = useState<NominationRecord[]>(initialNominations);
   const [selectedRecord, setSelectedRecord] = useState<NominationRecord | null>(null);
+
+  // Operational exception and queue metrics
+  const unreviewedNominationsCount = nominationsList.filter((n) => n.status === 'submitted').length;
+  const inReviewNominationsCount = nominationsList.filter((n) =>
+    ['screening', 'shortlisted', 'interview'].includes(n.status)
+  ).length;
+  const selectedNominationsCount = nominationsList.filter((n) => n.status === 'selected').length;
+  const declinedNominationsCount = nominationsList.filter((n) => n.status === 'declined').length;
+  const unhandledMessagesCount = initialContactMessages.filter(
+    (m) => m.status === 'new' || m.status === 'pending'
+  ).length;
+  const totalPendingActionItems =
+    (session.role === 'super_admin' || session.role === 'regional_coordinator' ? pendingPaymentsCount : 0) +
+    unreviewedNominationsCount;
 
   // Admin User Management state (Phase B12.1 & B12.2 - Super Admin only)
   const [adminUsersList, setAdminUsersList] = useState<AdminUserRecord[]>(initialAdminUsers);
@@ -808,6 +827,27 @@ export function AdminDashboard({
               <nav className="space-y-1.5">
                 <button
                   onClick={() => {
+                    setActiveTab('overview');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-[4px] text-xs font-semibold min-h-[44px] transition-colors ${
+                    activeTab === 'overview'
+                      ? 'bg-[#0E1E3B] text-white'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5">
+                    <LayoutDashboard className="w-4 h-4" /> Overview
+                  </span>
+                  {totalPendingActionItems > 0 && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500 text-white font-bold">
+                      {totalPendingActionItems}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => {
                     setActiveTab('nominations');
                     setIsMobileMenuOpen(false);
                   }}
@@ -1007,7 +1047,9 @@ export function AdminDashboard({
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 shrink-0">Section:</span>
             <span className="text-xs sm:text-sm font-bold text-[#0E1E3B] capitalize truncate">
-              {activeTab === 'administrators'
+              {activeTab === 'overview'
+                ? 'Overview & Exceptions'
+                : activeTab === 'administrators'
                 ? 'Administrators'
                 : activeTab === 'messages'
                 ? 'Inquiries'
@@ -1027,6 +1069,23 @@ export function AdminDashboard({
         {/* Navigation Tabs (Desktop / Tablet) */}
         <div className="hidden sm:flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 mb-6">
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-[4px] transition-colors ${
+                activeTab === 'overview'
+                  ? 'bg-[#0E1E3B] text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              Overview
+              {totalPendingActionItems > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500 text-white font-bold ml-0.5">
+                  {totalPendingActionItems}
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => setActiveTab('nominations')}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-[4px] transition-colors ${
@@ -1118,6 +1177,222 @@ export function AdminDashboard({
             )}
           </div>
         </div>
+
+        {/* Tab 0: Overview & Operational Exceptions */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            {/* Operational Priority Alert Strip */}
+            {totalPendingActionItems > 0 ? (
+              <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-[4px] shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-bold text-amber-900">
+                        Operational Action Items Requiring Attention ({totalPendingActionItems})
+                      </h3>
+                      <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                        {(session.role === 'super_admin' || session.role === 'regional_coordinator') && pendingPaymentsCount > 0 ? (
+                          <>
+                            <strong>{pendingPaymentsCount}</strong> payment verification{pendingPaymentsCount === 1 ? '' : 's'} awaiting secretariat receipt review.{' '}
+                          </>
+                        ) : null}
+                        {unreviewedNominationsCount > 0 ? (
+                          <>
+                            <strong>{unreviewedNominationsCount}</strong> candidate nomination dossier{unreviewedNominationsCount === 1 ? '' : 's'} awaiting initial screening.
+                          </>
+                        ) : null}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {(session.role === 'super_admin' || session.role === 'regional_coordinator') && pendingPaymentsCount > 0 && (
+                      <Link
+                        href="/admin/payments"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white min-h-[38px] transition-colors"
+                      >
+                        <FileCheck2 className="w-3.5 h-3.5" /> Verify Payments
+                      </Link>
+                    )}
+                    {unreviewedNominationsCount > 0 && (
+                      <button
+                        onClick={() => {
+                          setActiveTab('nominations');
+                          setFilterStatus('submitted');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-xs font-semibold bg-[#0E1E3B] hover:bg-[#1a335f] text-white min-h-[38px] transition-colors"
+                      >
+                        <FileText className="w-3.5 h-3.5" /> Review Dossiers
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-r-[4px] shadow-xs">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <h3 className="text-sm font-bold text-emerald-900">
+                      Operational Queues Up to Date
+                    </h3>
+                    <p className="text-xs text-emerald-800 mt-0.5">
+                      No unreviewed nominations or pending payment verification items are currently awaiting action in your scope.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Actionable Exception Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Card 1: Payments Verification */}
+              {(session.role === 'super_admin' || session.role === 'regional_coordinator') && (
+                <div className="bg-white p-5 rounded-[4px] border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Payment Verification Queue
+                      </span>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                          pendingPaymentsCount > 0
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        }`}
+                      >
+                        {pendingPaymentsCount > 0 ? `${pendingPaymentsCount} Pending` : 'Cleared'}
+                      </span>
+                    </div>
+                    <div className="text-3xl font-extrabold text-[#0E1E3B] font-mono">
+                      {pendingPaymentsCount}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                      Submitted Mobile Money receipts awaiting secretariat payment verification before membership activation.
+                    </p>
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                    <Link
+                      href="/admin/payments"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0E1E3B] hover:text-blue-700 transition-colors"
+                    >
+                      Open Verification Queue <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+
+              {/* Card 2: Unreviewed Nominations */}
+              <div className="bg-white p-5 rounded-[4px] border border-slate-200 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      Unreviewed Nominations
+                    </span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                        unreviewedNominationsCount > 0
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
+                      {unreviewedNominationsCount > 0 ? `${unreviewedNominationsCount} To Screen` : 'Up to Date'}
+                    </span>
+                  </div>
+                  <div className="text-3xl font-extrabold text-[#0E1E3B] font-mono">
+                    {unreviewedNominationsCount}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                    Applicant dossiers submitted and pending initial vetting. Total dossiers in your administrative scope: <strong>{nominationsList.length}</strong>.
+                  </p>
+                </div>
+                <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setActiveTab('nominations');
+                      setFilterStatus('submitted');
+                    }}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0E1E3B] hover:text-blue-700 transition-colors"
+                  >
+                    Screen Submitted Dossiers <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 3: Active Member Registry */}
+              {(session.role === 'super_admin' || session.role === 'regional_coordinator') && (
+                <div className="bg-white p-5 rounded-[4px] border border-slate-200 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Official Member Registry
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                        Active Members
+                      </span>
+                    </div>
+                    <div className="text-3xl font-extrabold text-[#0E1E3B] font-mono">
+                      {initialMembers.length}
+                    </div>
+                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                      Civic registrants with issued official YRL Member IDs {session.role === 'regional_coordinator' ? `in ${session.assignedRegion} Region` : 'nationwide'}.
+                    </p>
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      onClick={() => setActiveTab('members')}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0E1E3B] hover:text-blue-700 transition-colors"
+                    >
+                      View Member Registry <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Nomination Pipeline Breakdown */}
+            <div className="bg-white p-5 rounded-[4px] border border-slate-200 shadow-xs">
+              <h3 className="text-sm font-bold text-[#0E1E3B] mb-4 flex items-center justify-between">
+                <span>Nomination Vetting Pipeline Breakdown</span>
+                <span className="text-xs font-normal text-slate-500 font-mono">
+                  {nominationsList.length} Total Dossiers
+                </span>
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="bg-slate-50 p-3 rounded border border-slate-200 text-center">
+                  <div className="text-xs font-semibold text-slate-500">Submitted</div>
+                  <div className="text-xl font-bold text-slate-900 mt-1">{unreviewedNominationsCount}</div>
+                </div>
+                <div className="bg-blue-50 p-3 rounded border border-blue-200 text-center">
+                  <div className="text-xs font-semibold text-blue-700">Screening</div>
+                  <div className="text-xl font-bold text-blue-900 mt-1">
+                    {nominationsList.filter((n) => n.status === 'screening').length}
+                  </div>
+                </div>
+                <div className="bg-purple-50 p-3 rounded border border-purple-200 text-center">
+                  <div className="text-xs font-semibold text-purple-700">Shortlisted</div>
+                  <div className="text-xl font-bold text-purple-900 mt-1">
+                    {nominationsList.filter((n) => n.status === 'shortlisted').length}
+                  </div>
+                </div>
+                <div className="bg-amber-50 p-3 rounded border border-amber-200 text-center">
+                  <div className="text-xs font-semibold text-amber-700">Interview</div>
+                  <div className="text-xl font-bold text-amber-900 mt-1">
+                    {nominationsList.filter((n) => n.status === 'interview').length}
+                  </div>
+                </div>
+                <div className="bg-emerald-50 p-3 rounded border border-emerald-200 text-center">
+                  <div className="text-xs font-semibold text-emerald-700">Selected</div>
+                  <div className="text-xl font-bold text-emerald-900 mt-1">{selectedNominationsCount}</div>
+                </div>
+                <div className="bg-red-50 p-3 rounded border border-red-200 text-center">
+                  <div className="text-xs font-semibold text-red-700">Declined</div>
+                  <div className="text-xl font-bold text-red-900 mt-1">{declinedNominationsCount}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tab 1: Nominations */}
         {activeTab === 'nominations' && (

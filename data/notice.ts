@@ -9,11 +9,11 @@ export interface NoticePoint {
 export const NOTICE_POINTS: NoticePoint[] = [
   {
     id: 1,
-    title: 'Nominations and Registrations are 100% Free',
-    shortSummary: 'Zero fees at any stage of nomination or membership.',
+    title: 'Nominations are 100% Free • Official Membership Fee GH₵5.00',
+    shortSummary: 'Zero fees for nominations; GH₵5.00 official membership fee.',
     description:
-      'All nomination, registration, and civic participation processes within Youth Republic Leadership (YRL) are strictly free of charge. No officer, representative, committee member, or third-party agent is authorized to solicit, demand, or accept any fee or financial consideration from any applicant. If anyone demands payment to facilitate your nomination or membership, report it immediately.',
-    badge: '100% Free',
+      'Nominations for all interim leadership positions in Youth Republic Leadership (YRL) are strictly 100% free of charge. For civic membership registration, the required official YRL Membership Fee is GH₵5.00, payable through our official Mobile Money destination: 0245600135 (Account Name: Sualihu Arrimeyaw). Payment must be verified by an authorized YRL administrator before membership registration is complete and active. No officer, representative, committee member, or third-party agent is authorized to solicit, demand, or accept cash or informal fees from any applicant.',
+    badge: 'Official Fee Notice',
   },
   {
     id: 2,

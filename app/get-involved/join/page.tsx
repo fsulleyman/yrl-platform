@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Shield,
+  ShieldCheck,
   ArrowRight,
   Printer,
   RotateCcw,
@@ -22,6 +23,8 @@ import {
   FileCheck,
   FileText,
   AlertTriangle,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { Container } from '@/components/ui/Container';
 import { Section } from '@/components/ui/Section';
@@ -53,7 +56,6 @@ import {
 import {
   createMembershipApplication,
   submitApplicantReceipt,
-  initializePaystackPaymentAction,
 } from '@/lib/actions/payment';
 import type { PaymentInstructions } from '@/lib/payment/types';
 
@@ -127,33 +129,14 @@ export default function JoinPage() {
   const [receiptErrors, setReceiptErrors] = useState<Record<string, string>>({});
   const [isUploadingReceipt, setIsUploadingReceipt] = useState(false);
 
-  // Payment method selection state (Manual Mobile Money is the primary operational method)
-  const [paymentMethodTab, setPaymentMethodTab] = useState<'manual' | 'paystack'>('manual');
-  const [isInitializingPaystack, setIsInitializingPaystack] = useState(false);
-  const [paystackError, setPaystackError] = useState<string | null>(null);
+  // MoMo clipboard copy feedback state
+  const [copiedMomo, setCopiedMomo] = useState(false);
 
-  const handlePaystackCheckout = async () => {
-    if (!applicationData) return;
-    setIsInitializingPaystack(true);
-    setPaystackError(null);
-
-    try {
-      const res = await initializePaystackPaymentAction({
-        applicationId: applicationData.applicationId,
-        email: formData.email,
-      });
-
-      if (res.success && res.data?.authorizationUrl) {
-        window.location.href = res.data.authorizationUrl;
-      } else {
-        setPaystackError(
-          res.error || 'Failed to initialize Paystack checkout. Please try again or use manual transfer.'
-        );
-      }
-    } catch (err) {
-      setPaystackError('An unexpected error occurred connecting to Paystack.');
-    } finally {
-      setIsInitializingPaystack(false);
+  const handleCopyMomo = (numberToCopy: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(numberToCopy);
+      setCopiedMomo(true);
+      setTimeout(() => setCopiedMomo(false), 2500);
     }
   };
 
@@ -547,9 +530,9 @@ export default function JoinPage() {
             <div className="mb-8">
               <div className="flex items-center justify-between relative">
                 <div className="w-full absolute top-1/2 h-0.5 bg-slate-200 -z-0" />
-                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-1 sm:px-2">
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                       currentStep === 'application'
                         ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
                         : 'bg-emerald-600 text-white'
@@ -557,12 +540,12 @@ export default function JoinPage() {
                   >
                     1
                   </div>
-                  <span className="text-xs font-semibold mt-1 text-slate-700">Application</span>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1 text-slate-700 text-center">Registration Details</span>
                 </div>
 
-                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-1 sm:px-2">
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                       currentStep === 'payment_instructions'
                         ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
                         : currentStep === 'confirmation'
@@ -572,12 +555,12 @@ export default function JoinPage() {
                   >
                     2
                   </div>
-                  <span className="text-xs font-semibold mt-1 text-slate-700">Payment Evidence</span>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1 text-slate-700 text-center">Membership Fee — GH₵5.00</span>
                 </div>
 
-                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-2">
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-1 sm:px-2">
                   <div
-                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm ${
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                       currentStep === 'confirmation'
                         ? 'bg-[#0B1F3A] text-white ring-4 ring-[#C9A227]/30'
                         : 'bg-slate-200 text-slate-500'
@@ -585,7 +568,14 @@ export default function JoinPage() {
                   >
                     3
                   </div>
-                  <span className="text-xs font-semibold mt-1 text-slate-700">Verification</span>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1 text-slate-700 text-center">Payment Verification</span>
+                </div>
+
+                <div className="flex flex-col items-center relative z-10 bg-slate-50 px-1 sm:px-2">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm bg-slate-200 text-slate-500">
+                    4
+                  </div>
+                  <span className="text-[10px] sm:text-xs font-semibold mt-1 text-slate-500 text-center">Membership Activation</span>
                 </div>
               </div>
             </div>
@@ -595,7 +585,7 @@ export default function JoinPage() {
               <>
                 <div className="text-center mb-10">
                   <Badge variant="gold" className="mb-3 uppercase tracking-wider text-xs font-semibold">
-                    Step 1 of 3 • Civic Registration
+                    Step 1 of 4 • Registration Details
                   </Badge>
                   <h1 className="text-3xl sm:text-4xl font-heading font-extrabold text-[#0B1F3A] tracking-tight mb-4">
                     Join the Youth Republic Leadership Movement
@@ -612,11 +602,27 @@ export default function JoinPage() {
                       Membership Application Form
                     </CardTitle>
                     <CardDescription className="text-sm text-slate-600">
-                      Please complete all required fields. A one-time membership registration fee of GH₵5.00 applies to support grassroots civic organizing.
+                      Please complete all required fields. Payment of the GH₵5.00 membership fee is required to complete your YRL membership registration.
                     </CardDescription>
                   </CardHeader>
 
                   <CardContent className="pt-6">
+                    {/* Prominent Membership Fee Requirement Notice */}
+                    <div className="mb-6 p-4 rounded-lg bg-amber-50 border-2 border-[#C9A227]/40 text-slate-800 flex items-start gap-3">
+                      <CreditCard className="w-5 h-5 text-[#0B1F3A] shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] block">
+                          YRL Membership Fee: GH₵5.00
+                        </span>
+                        <p className="text-xs sm:text-sm text-slate-700 leading-relaxed font-medium">
+                          Payment of the <strong>GH₵5.00 membership fee</strong> is required to complete your YRL membership registration.
+                        </p>
+                        <p className="text-xs text-slate-600 leading-relaxed">
+                          Your details will be registered in Step 1, after which you will be guided to complete the GH₵5.00 payment via Mobile Money. Following verification by the Secretariat, your official Member ID will be issued and your membership activated.
+                        </p>
+                      </div>
+                    </div>
+
                     {/* Error Summary */}
                     {Object.keys(errors).length > 0 && (
                       <div
@@ -1025,7 +1031,7 @@ export default function JoinPage() {
                             </>
                           ) : (
                             <>
-                              <span>Proceed to Payment</span>
+                              <span>Proceed to Membership Fee (GH₵5.00)</span>
                               <ArrowRight className="w-4 h-4 ml-1" aria-hidden="true" />
                             </>
                           )}
@@ -1042,13 +1048,13 @@ export default function JoinPage() {
               <div className="animate-in fade-in duration-300 space-y-8">
                 <div className="text-center mb-6">
                   <Badge variant="gold" className="mb-2 uppercase tracking-wider text-xs font-semibold">
-                    Step 2 of 3 • Membership Fee Payment
+                    Step 2 of 4 • Membership Fee — GH₵5.00
                   </Badge>
                   <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#0B1F3A]">
-                    Membership Fee Payment
+                    YRL Membership Fee — GH₵5.00
                   </h2>
                   <p className="text-sm sm:text-base text-slate-600 max-w-xl mx-auto mt-2 leading-relaxed">
-                    Please complete your membership payment using the provided payment instructions. After payment, upload a clear copy of your payment receipt or proof of payment.
+                    Payment of the GH₵5.00 membership fee is required to complete your YRL membership registration. Please send the fee using the provided Mobile Money instructions and upload your transaction receipt.
                   </p>
                   <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 text-left max-w-xl">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -1076,191 +1082,102 @@ export default function JoinPage() {
                   </div>
                 </div>
 
-                {/* Payment Method Selector Tabs */}
-                <div className="flex rounded-lg bg-slate-100 p-1 border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethodTab('manual')}
-                    className={`flex-1 py-2.5 px-4 text-sm font-semibold rounded-md transition-all flex items-center justify-center gap-2 ${
-                      paymentMethodTab === 'manual'
-                        ? 'bg-white text-[#0B1F3A] shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <Upload className="w-4 h-4 text-amber-600" />
-                    <span>Manual Mobile Money (Upload Receipt)</span>
-                    <Badge variant="default" className="text-[10px] py-0 px-1.5 ml-1 bg-amber-100 text-amber-800 border-amber-300">
-                      Primary
-                    </Badge>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMethodTab('paystack')}
-                    className={`flex-1 py-2.5 px-4 text-sm font-semibold rounded-md transition-all flex items-center justify-center gap-2 ${
-                      paymentMethodTab === 'paystack'
-                        ? 'bg-white text-[#0B1F3A] shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    <CreditCard className="w-4 h-4 text-blue-600" />
-                    <span>Pay Online (Paystack)</span>
-                  </button>
-                </div>
+                {/* Official Mobile Money Instructions Card */}
+                {(() => {
+                  const momoNumber = applicationData.instructions?.momoNumber || '0245600135';
+                  const accountName = applicationData.instructions?.accountName || 'Sualihu Arrimeyaw';
+                  const amountFormatted = applicationData.amount ? applicationData.amount.toFixed(2) : '5.00';
 
-                {/* OPTION 1: PAYSTACK AUTOMATED PAYMENT */}
-                {paymentMethodTab === 'paystack' && (
-                  <Card className="border border-blue-200 shadow-sm bg-white">
-                    <CardHeader className="bg-blue-50/60 border-b border-blue-100 pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-blue-100 text-[#0B1F3A] flex items-center justify-center font-bold">
-                          <CreditCard className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-lg font-bold text-[#0B1F3A]">
-                            Paystack Instant Online Checkout
-                          </CardTitle>
-                          <CardDescription className="text-xs text-slate-500">
-                            Instant online verification via MTN MoMo, Telecel Cash, AT Money, or Visa/Mastercard
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-6 space-y-5">
-                      <div className="p-4 bg-blue-50/40 rounded-lg border border-blue-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div>
-                          <span className="text-xs text-slate-500 uppercase font-semibold block">Required Membership Fee</span>
-                          <span className="text-2xl font-bold text-[#0B1F3A]">
-                            GH₵{applicationData.amount.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="text-xs text-slate-600">
-                          <span className="font-semibold block text-slate-800">Authoritative Reference:</span>
-                          <span className="font-mono font-bold text-[#0B1F3A]">{applicationData.paymentReference}</span>
-                        </div>
-                      </div>
-
-                      {paystackError && (
-                        <Alert variant="error" title="Payment Initialization Error">
-                          <p className="text-xs">{paystackError}</p>
-                        </Alert>
-                      )}
-
-                      <div className="p-4 bg-slate-50 rounded-lg text-xs text-slate-600 space-y-2 border border-slate-200">
-                        <p className="font-semibold text-slate-800">How Paystack Checkout Works:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          <li>Click the checkout button below to launch the encrypted Paystack payment portal.</li>
-                          <li>Select your preferred payment method: Ghanaian Mobile Money wallet or Card.</li>
-                          <li>Follow the prompt on your phone or card provider to authorize GH₵{applicationData.amount.toFixed(2)}.</li>
-                          <li>Your payment will be automatically verified by our gateway webhook upon completion.</li>
-                        </ul>
-                      </div>
-
-                      <Button
-                        type="button"
-                        onClick={handlePaystackCheckout}
-                        disabled={isInitializingPaystack}
-                        className="w-full py-3.5 text-base font-semibold bg-[#0B1F3A] hover:bg-[#14325c] text-white flex items-center justify-center gap-2 shadow-sm"
-                      >
-                        {isInitializingPaystack ? (
-                          <>
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Connecting to Paystack...</span>
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="w-5 h-5" />
-                            <span>Pay GH₵{applicationData.amount.toFixed(2)} via Paystack</span>
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {/* OPTION 2: MANUAL MOBILE MONEY INSTRUCTIONS & RECEIPT */}
-                {paymentMethodTab === 'manual' && (
-                  <>
-                    {/* Mobile Money Instructions Card */}
-                    {applicationData.instructions && applicationData.instructions.isConfigured ? (
-                      <Card className="border border-slate-200 shadow-sm bg-white">
-                        <CardHeader className="bg-slate-50/80 border-b border-slate-100 pb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-amber-100 text-[#0B1F3A] flex items-center justify-center font-bold">
-                              <CreditCard className="w-5 h-5 text-[#C9A227]" />
-                            </div>
-                            <div>
-                              <CardTitle className="text-lg font-bold text-[#0B1F3A]">
-                                Official Mobile Money Instructions
-                              </CardTitle>
-                              <CardDescription className="text-xs text-slate-500">
-                                Send the exact registration fee to the authorized YRL account
-                              </CardDescription>
-                            </div>
+                  return (
+                    <Card className="border-2 border-amber-300/80 shadow-md bg-white">
+                      <CardHeader className="bg-amber-50/70 border-b border-amber-200/60 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-amber-100 text-[#0B1F3A] flex items-center justify-center font-bold">
+                            <CreditCard className="w-5 h-5 text-[#C9A227]" />
                           </div>
-                        </CardHeader>
+                          <div>
+                            <CardTitle className="text-lg font-bold text-[#0B1F3A]">
+                              Official Mobile Money Payment Channel
+                            </CardTitle>
+                            <CardDescription className="text-xs text-slate-600 font-medium">
+                              Send the required YRL membership fee (GH₵5.00) to the official account below
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
 
-                    <CardContent className="pt-6 space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-amber-50/50 rounded-lg border border-amber-200/50">
-                        <div>
-                          <span className="text-xs text-slate-500 uppercase font-semibold block">Required Fee</span>
-                          <span className="text-xl font-bold text-[#0B1F3A]">
-                            GH₵{applicationData.amount.toFixed(2)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-xs text-slate-500 uppercase font-semibold block">MoMo Number</span>
-                          <span className="text-lg font-mono font-bold text-[#0B1F3A] select-all">
-                            {applicationData.instructions.momoNumber}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-xs text-slate-500 uppercase font-semibold block">Account Name</span>
-                          <span className="text-sm font-semibold text-slate-800">
-                            {applicationData.instructions.accountName}
-                          </span>
-                        </div>
-                      </div>
+                      <CardContent className="pt-6 space-y-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-5 bg-gradient-to-br from-amber-50/80 via-white to-amber-50/50 rounded-xl border border-amber-200">
+                          <div>
+                            <span className="text-xs text-slate-500 uppercase font-semibold block">Required Membership Fee</span>
+                            <span className="text-2xl sm:text-3xl font-extrabold text-[#0B1F3A] block mt-1">
+                              GH₵{amountFormatted}
+                            </span>
+                            <span className="text-[11px] text-amber-800 font-medium mt-0.5 block">
+                              Required for active membership
+                            </span>
+                          </div>
 
-                      <div className="text-xs text-slate-600 space-y-1 bg-slate-50 p-4 rounded-md border border-slate-200/60">
-                        <p className="font-semibold text-slate-800">Payment Steps:</p>
-                        <ol className="list-decimal list-inside space-y-1 text-slate-700">
-                          <li>Open your Mobile Money wallet on your phone.</li>
-                          <li>Send <strong>GH₵{applicationData.amount.toFixed(2)}</strong> to <strong>{applicationData.instructions.momoNumber}</strong> ({applicationData.instructions.accountName}).</li>
-                          <li>Use your Application Number <strong>{applicationData.applicationNumber}</strong> as the payment reference or note if supported.</li>
-                          <li>Wait for the SMS confirmation and copy the <strong>Transaction ID / Reference</strong>.</li>
-                          <li>Take a clear screenshot of the SMS or payment confirmation receipt and upload below.</li>
-                        </ol>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  /* Safe Unconfigured State */
-                  <Alert variant="warning" title="Payment Destination Configuration in Progress" className="bg-amber-50/90 border-[#C9A227] text-slate-800">
-                    <p className="text-sm text-slate-700 leading-relaxed mt-1">
-                      Your membership application (<strong>{applicationData.applicationNumber}</strong>) has been successfully recorded in our system.
-                    </p>
-                    <p className="text-sm text-slate-700 leading-relaxed mt-2">
-                      The official YRL Mobile Money payment destination is currently being finalized by the Secretariat. Payment instructions will be made available shortly. Please save your Application Reference number to submit payment once the destination is activated.
-                    </p>
-                    <div className="mt-4 pt-3 border-t border-amber-200/60 flex flex-wrap gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.print()}
-                        className="text-xs font-semibold"
-                      >
-                        <Printer className="w-3.5 h-3.5 mr-1.5" />
-                        Print / Save Reference
-                      </Button>
-                      <Link href="/">
-                        <Button variant="ghost" size="sm" className="text-xs">
-                          Return to Homepage
-                        </Button>
-                      </Link>
-                    </div>
-                  </Alert>
-                )}
+                          <div>
+                            <span className="text-xs text-slate-500 uppercase font-semibold block">MoMo Number</span>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xl sm:text-2xl font-mono font-bold text-[#0B1F3A] select-all tracking-wider">
+                                {momoNumber}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyMomo(momoNumber)}
+                                className="inline-flex items-center justify-center min-h-[44px] min-w-[44px] px-3 py-2 text-xs font-semibold rounded-md border border-amber-300 bg-amber-100/70 hover:bg-amber-200 text-[#0B1F3A] transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                                aria-label={`Copy official Mobile Money number ${momoNumber}`}
+                              >
+                                {copiedMomo ? (
+                                  <>
+                                    <Check className="w-4 h-4 text-emerald-700 mr-1" aria-hidden="true" />
+                                    <span className="text-emerald-800 font-bold">Copied!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-4 h-4 text-amber-900 mr-1" aria-hidden="true" />
+                                    <span>Copy</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                            <span className="text-[11px] text-slate-500 mt-0.5 block">MTN Mobile Money</span>
+                          </div>
+
+                          <div>
+                            <span className="text-xs text-slate-500 uppercase font-semibold block">Account Name</span>
+                            <span className="text-base sm:text-lg font-bold text-slate-900 block mt-1">
+                              {accountName}
+                            </span>
+                            <span className="text-[11px] text-emerald-700 font-medium mt-0.5 block flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Official YRL Recipient
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-slate-700 space-y-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <p className="font-bold text-slate-900 uppercase tracking-wider text-[11px]">
+                            Official Step-by-Step Payment Instructions:
+                          </p>
+                          <ol className="list-decimal list-inside space-y-1.5 text-slate-700 leading-relaxed">
+                            <li>Open your Mobile Money wallet on your phone (MTN MoMo, Telecel Cash, or AT Money).</li>
+                            <li>
+                              Transfer exactly <strong>GH₵{amountFormatted}</strong> to <strong>{momoNumber}</strong> (Recipient: <strong>{accountName}</strong>).
+                            </li>
+                            <li>
+                              Enter your Application Reference (<strong>{applicationData.applicationNumber}</strong>) as the payment reference / note if supported.
+                            </li>
+                            <li>Wait for the telecom SMS confirmation message and copy the <strong>Transaction ID / Reference</strong>.</li>
+                            <li>Enter the transaction reference and upload a screenshot or photo of your SMS confirmation receipt below.</li>
+                          </ol>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
 
                 {/* Receipt Upload Form */}
                 <Card className="border border-[#C9A227]/30 shadow-md bg-white">
@@ -1414,10 +1331,8 @@ export default function JoinPage() {
                       </form>
                     </CardContent>
                   </Card>
-              </>
+              </div>
             )}
-          </div>
-        )}
 
             {/* STEP 3: CONFIRMATION / PENDING VERIFICATION */}
             {currentStep === 'confirmation' && applicationData && (
@@ -1430,16 +1345,16 @@ export default function JoinPage() {
                       <Clock className="w-9 h-9 text-[#C9A227]" aria-hidden="true" />
                     </div>
                     <Badge variant="warning" className="mx-auto mb-2 text-xs uppercase tracking-wider font-semibold bg-amber-100 text-amber-800 border-amber-200">
-                      Payment Submitted for Verification
+                      Step 3 of 4 • Payment Verification
                     </Badge>
                     <h2 className="text-2xl sm:text-3xl font-heading font-extrabold text-[#0B1F3A]">
                       Payment Submitted for Verification
                     </h2>
                     <p className="text-sm sm:text-base font-medium text-slate-800 max-w-lg mx-auto mt-2 leading-relaxed">
-                      Your payment evidence has been received and is awaiting verification by YRL.
+                      Your GH₵5.00 membership payment is awaiting verification.
                     </p>
                     <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto mt-1 leading-relaxed">
-                      Your membership is not yet officially activated. You will be notified after the verification and membership approval process is completed.
+                      Your membership is not yet officially activated. You will be notified after payment verification and administrative membership approval are completed.
                     </p>
                   </CardHeader>
 
@@ -1501,7 +1416,7 @@ export default function JoinPage() {
                       Print / Save Confirmation
                     </Button>
 
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <div className="flex flex-wrap items-center justify-end gap-3 w-full sm:w-auto">
                       <Button
                         type="button"
                         variant="ghost"
@@ -1512,13 +1427,24 @@ export default function JoinPage() {
                         <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
                         Start New Application
                       </Button>
-                      <Link href="/" className="w-full sm:w-auto">
+                      <Link href="/member/register" className="w-full sm:w-auto">
                         <Button
                           variant="gold"
                           size="md"
-                          className="w-full sm:w-auto font-bold text-xs"
+                          className="w-full sm:w-auto font-bold text-xs shadow-sm flex items-center justify-center gap-1.5"
                         >
-                          Return to Home
+                          <ShieldCheck className="w-4 h-4" />
+                          <span>Set Up Member Account</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </Link>
+                      <Link href="/" className="w-full sm:w-auto">
+                        <Button
+                          variant="outline"
+                          size="md"
+                          className="w-full sm:w-auto text-xs text-slate-700"
+                        >
+                          Return Home
                         </Button>
                       </Link>
                     </div>

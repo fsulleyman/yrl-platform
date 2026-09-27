@@ -86,7 +86,14 @@ export const deleteAdminUserSchema = z.object({
 
 export type DeleteAdminUserInput = z.infer<typeof deleteAdminUserSchema>;
 
-export const EXPORT_DATASETS = ['nominations', 'members', 'inquiries', 'reviews'] as const;
+export const EXPORT_DATASETS = [
+  'nominations',
+  'members',
+  'inquiries',
+  'reviews',
+  'payments',
+  'applications',
+] as const;
 export type ExportDataset = (typeof EXPORT_DATASETS)[number];
 
 export const exportAdminDataSchema = z.object({

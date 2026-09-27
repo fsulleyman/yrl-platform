@@ -203,14 +203,37 @@ export interface PaymentQueueItem {
   has_receipt: boolean;
   receipt_mime_type?: string | null;
   receipt_file_size?: number | null;
+  payment_method?: string | null;
+  rejection_reason?: string | null;
 }
 
 export interface PaymentListFilters {
   status?: string;
   region?: string;
   search?: string;
+  hasReceipt?: boolean | 'all' | 'with_receipt' | 'without_receipt';
+  paymentMethod?: string;
+  dateRange?: string;
+  startDate?: string;
+  endDate?: string;
   page?: number;
   pageSize?: number;
+}
+
+export interface PaymentReconciliationSummary {
+  totalRecords: number;
+  pendingVerificationCount: number;
+  verifiedCount: number;
+  rejectedCount: number;
+  failedCount: number;
+  awaitingReceiptCount: number;
+  receiptSubmittedCount: number;
+  totalSubmittedAmount: number;
+  totalVerifiedAmount: number;
+  totalPendingAmount: number;
+  totalRejectedAmount: number;
+  receiptsWithEvidenceCount: number;
+  currency: string;
 }
 
 export interface PaginatedPaymentsResult {
@@ -222,11 +245,33 @@ export interface PaginatedPaymentsResult {
   totalAmountReceived?: number;
   verifiedPaymentsCount?: number;
   currency?: string;
+  reconciliation?: PaymentReconciliationSummary;
+}
+
+export interface MemberPaymentSummary {
+  id: string;
+  payment_reference: string;
+  transaction_reference: string | null;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  payment_method: PaymentMethod;
+  claimed_payment_date: string | null;
+  has_receipt: boolean;
+  receipt_original_filename: string | null;
+  receipt_mime_type: string | null;
+  receipt_file_size: number | null;
+  receipt_uploaded_at: string | null;
+  submitted_at: string;
+  verified_at: string | null;
+  rejected_at: string | null;
+  rejection_reason: string | null;
 }
 
 export interface PaymentSignedUrlResult {
   signedUrl: string;
   expiresIn: number;
+  filename?: string | null;
 }
 
 export interface PaymentDetailView {

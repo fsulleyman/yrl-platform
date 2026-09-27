@@ -53,7 +53,7 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'faq-6',
     question: 'Are nominations or membership registrations free?',
     answer:
-      'Yes. Nominations and registrations are 100% free of charge at all stages. YRL does not charge any application, processing, or membership fees. No person or agent is authorized to collect money on behalf of YRL.',
+      'Nominations for interim leadership roles are 100% free of charge at all stages. General civic membership registration requires payment of the official YRL Membership Fee of GH₵5.00 before membership registration can be completed and an applicant can become an active member. Official Mobile Money payment channel: 0245600135 (Recipient: Sualihu Arrimeyaw). No unauthorized person or agent is permitted to collect cash on behalf of YRL.',
     category: 'Eligibility & Non-Partisanship',
   },
   {
@@ -95,7 +95,14 @@ export const FAQ_ITEMS: FaqItem[] = [
     id: 'faq-12',
     question: 'How can someone get involved with YRL?',
     answer:
-      'You can participate in two primary ways: (1) Submit an Interim Leadership Nomination for a national or regional officer role, or (2) Register as a Civic Member to participate in grassroots community projects and regional youth networks. Both options are completely free.',
+      'You can participate in two primary ways: (1) Submit an Interim Leadership Nomination for a national or regional officer role (100% free), or (2) Register as a Civic Member to participate in grassroots community projects and regional youth networks (requires the official YRL Membership Fee — GH₵5.00).',
+    category: 'Getting Involved',
+  },
+  {
+    id: 'faq-13',
+    question: 'How do I pay the required YRL Membership Fee?',
+    answer:
+      'To complete your membership registration, transfer the official YRL Membership Fee of GH₵5.00 via Mobile Money to 0245600135 (Account Name: Sualihu Arrimeyaw). Enter your Application Reference Number as the transaction note, obtain the transaction/reference ID from the confirmation SMS, and upload your receipt screenshot during registration. Your payment will be verified by an authorized administrator before your membership is activated.',
     category: 'Getting Involved',
   },
 ];

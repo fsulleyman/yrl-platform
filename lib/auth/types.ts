@@ -154,6 +154,7 @@ export interface MemberApplicationSummary {
   status: string;
   submitted_at: string;
   activated_at?: string | null;
+  rejection_reason?: string | null;
 }
 
 export interface MemberSession {

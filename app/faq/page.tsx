@@ -84,11 +84,11 @@ export default function FaqPage() {
             <div className="pt-2 flex flex-wrap items-center gap-3 text-xs text-slate-400">
               <span className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-[4px] border border-white/10">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#006B3F]" />
-                <span className="text-white font-medium">12 Verified Answers</span>
+                <span className="text-white font-medium">{FAQ_ITEMS.length} Verified Answers</span>
               </span>
               <span className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-[4px] border border-white/10">
                 <Shield className="w-3.5 h-3.5 text-[#FCD116]" />
-                <span className="text-white font-medium">100% Free Process</span>
+                <span className="text-white font-medium">Free Nominations • GH₵5.00 Membership Fee</span>
               </span>
             </div>
           </div>
@@ -225,8 +225,7 @@ export default function FaqPage() {
           </h2>
 
           <p className="text-sm sm:text-base text-slate-300 max-w-xl mx-auto leading-relaxed">
-            All nominations and memberships are 100% free. Apply for an interim leadership role or
-            join as a general civic member today.
+            Nominations are 100% free. General civic membership requires payment of the GH₵5.00 membership fee to complete registration. Apply for an interim leadership role or join as a civic member today.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">

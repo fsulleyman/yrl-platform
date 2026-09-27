@@ -304,7 +304,8 @@ describe('Phase B13.2: Membership Application & Manual Mobile Money Receipt Subm
       const config = await getPaymentConfiguration();
       expect(config.membership_fee).toBe(5.0);
       expect(config.currency).toBe('GHS');
-      expect(config.momo_number).toBeNull();
+      expect(config.momo_number).toBe('0245600135');
+      expect(config.momo_account_name).toBe('Sualihu Arrimeyaw');
     });
   });
 

@@ -71,6 +71,7 @@ export default async function AdminPage() {
       initialContactMessages={scopedData.contactMessages}
       initialNewsArticles={scopedData.newsArticles}
       initialAdminUsers={scopedData.adminUsers || []}
+      pendingPaymentsCount={scopedData.pendingPaymentsCount ?? 0}
     />
   );
 }

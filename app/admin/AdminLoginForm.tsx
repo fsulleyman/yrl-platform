@@ -422,7 +422,7 @@ export function AdminLoginForm({
                 placeholder="At least 8 characters"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
+                className="w-full min-h-[44px] text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
               />
             </div>
 
@@ -442,7 +442,7 @@ export function AdminLoginForm({
                 placeholder="Re-enter your chosen password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
+                className="w-full min-h-[44px] text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
               />
             </div>
 
@@ -452,7 +452,7 @@ export function AdminLoginForm({
               size="md"
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 bg-[#0E1E3B] hover:bg-[#1a3461] text-white"
+              className="flex items-center justify-center gap-2 min-h-[44px] bg-[#0E1E3B] hover:bg-[#1a3461] text-white"
             >
               {isSubmitting ? (
                 <>
@@ -498,7 +498,7 @@ export function AdminLoginForm({
                 placeholder="admin@domain.org"
                 value={resetEmail}
                 onChange={(e) => setResetEmail(e.target.value)}
-                className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
+                className="w-full min-h-[44px] text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
               />
             </div>
 
@@ -508,7 +508,7 @@ export function AdminLoginForm({
               size="md"
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 bg-[#0E1E3B] hover:bg-[#1a3461] text-white"
+              className="flex items-center justify-center gap-2 min-h-[44px] bg-[#0E1E3B] hover:bg-[#1a3461] text-white"
             >
               {isSubmitting ? (
                 <>
@@ -553,7 +553,7 @@ export function AdminLoginForm({
                 required
                 autoComplete="email"
                 placeholder="reviewer@domain.org"
-                className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
+                className="w-full min-h-[44px] text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
               />
             </div>
 
@@ -584,7 +584,7 @@ export function AdminLoginForm({
                 required
                 autoComplete="current-password"
                 placeholder="••••••••••••"
-                className="w-full text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
+                className="w-full min-h-[44px] text-sm px-3.5 py-2.5 border border-slate-300 rounded-[4px] focus:outline-none focus:ring-2 focus:ring-[#0E1E3B]"
               />
             </div>
 
@@ -594,7 +594,7 @@ export function AdminLoginForm({
               size="md"
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center justify-center gap-2"
+              className="flex items-center justify-center gap-2 min-h-[44px]"
             >
               {isSubmitting ? (
                 <>

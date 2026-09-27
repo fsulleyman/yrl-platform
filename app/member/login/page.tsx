@@ -87,7 +87,7 @@ export default function MemberLoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="kwame@example.com"
                   disabled={isSubmitting}
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A227] focus:border-transparent text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A227] focus:border-transparent text-sm disabled:bg-slate-100 disabled:text-slate-500 min-h-[44px]"
                 />
               </div>
             </div>
@@ -113,7 +113,7 @@ export default function MemberLoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   disabled={isSubmitting}
-                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A227] focus:border-transparent text-sm disabled:bg-slate-100 disabled:text-slate-500"
+                  className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#C9A227] focus:border-transparent text-sm disabled:bg-slate-100 disabled:text-slate-500 min-h-[44px]"
                 />
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function MemberLoginPage() {
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="w-full justify-center bg-[#0B1F3A] hover:bg-[#15345E] text-white py-2.5 font-medium shadow-sm"
+              className="w-full justify-center bg-[#0B1F3A] hover:bg-[#15345E] text-white py-2.5 font-medium shadow-sm min-h-[44px]"
             >
               {isSubmitting ? (
                 <>
@@ -137,7 +137,16 @@ export default function MemberLoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 border-t border-slate-200 pt-5 text-center text-xs text-slate-500">
+          <div className="mt-6 border-t border-slate-200 pt-5 text-center text-xs text-slate-500 space-y-2">
+            <p>
+              First time here?{' '}
+              <Link
+                href="/member/register"
+                className="text-[#0B1F3A] hover:text-[#C9A227] font-semibold underline underline-offset-2"
+              >
+                Set up your member account
+              </Link>
+            </p>
             <p>
               Not yet a registered member?{' '}
               <Link

@@ -47,7 +47,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             }
             className={twMerge(
               clsx(
-                'w-full px-3.5 py-2.5 pr-10 rounded-[6px] text-sm text-[#0F172A] bg-white border transition-colors outline-none appearance-none cursor-pointer',
+                'w-full px-3.5 py-2.5 pr-10 rounded-[6px] text-sm text-[#0F172A] bg-white border transition-colors outline-none appearance-none cursor-pointer min-h-[44px]',
                 hasError
                   ? 'border-[#CE1126] focus:border-[#CE1126] focus:ring-2 focus:ring-[#CE1126]/20'
                   : 'border-slate-300 hover:border-slate-400 focus:border-[#0B1F3A] focus:ring-2 focus:ring-[#0B1F3A]/20',

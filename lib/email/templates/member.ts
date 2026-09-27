@@ -72,7 +72,7 @@ export function renderMembershipEmail(data: MembershipEmailData): { subject: str
       </table>
 
       <div class="notice">
-        <strong>Non-Partisan Civic Commitment:</strong> YRL is an independent, non-partisan civil society movement dedicated to empowering Ghanaian youth through civic literacy, ethical leadership, and grassroots community service. Membership is entirely voluntary and free.
+        <strong>Non-Partisan Civic Commitment:</strong> YRL is an independent, non-partisan civil society movement dedicated to empowering Ghanaian youth through civic literacy, ethical leadership, and grassroots community service. Your YRL Membership Fee (GH₵5.00) has been verified and your membership is active.
       </div>
 
       <div class="steps">
@@ -115,7 +115,7 @@ ${data.occupation ? `- Occupation: ${data.occupation}` : ''}
 - Membership Status: Active
 
 Non-Partisan Civic Commitment:
-YRL is an independent, non-partisan civil society movement dedicated to empowering Ghanaian youth through civic literacy, ethical leadership, and grassroots community service. Membership is entirely voluntary and free.
+YRL is an independent, non-partisan civil society movement dedicated to empowering Ghanaian youth through civic literacy, ethical leadership, and grassroots community service. Your YRL Membership Fee (GH₵5.00) has been verified and your membership is active.
 
 What Happens Next?
 1. Regional Assembly: You will be connected with local civic convenings and chapter activities in the ${data.region} Region.

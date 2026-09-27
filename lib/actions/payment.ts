@@ -8,7 +8,7 @@
  */
 
 import { revalidatePath } from 'next/cache';
-import { getAdminSession } from '@/lib/auth/server';
+import { getAdminSession, getMemberAuthResult } from '@/lib/auth/server';
 import {
   createMembershipApplication as serviceCreateMembershipApplication,
   submitApplicantReceipt as serviceSubmitApplicantReceipt,
@@ -21,6 +21,8 @@ import {
   getAdminPaymentDetail as serviceGetAdminPaymentDetail,
   initializePaystackPayment as serviceInitializePaystackPayment,
   getPublicPaymentStatus as serviceGetPublicPaymentStatus,
+  getMemberApplicationPayment as serviceGetMemberApplicationPayment,
+  getMemberOwnPaymentReceiptSignedUrl as serviceGetMemberOwnPaymentReceiptSignedUrl,
 } from '@/lib/payment/service';
 import type {
   PaymentOperationResult,
@@ -36,6 +38,7 @@ import type {
   PaymentDetailView,
   PaystackInitializeResult,
   PaymentStatusResult,
+  MemberPaymentSummary,
 } from '@/lib/payment/types';
 
 /**
@@ -191,4 +194,44 @@ export async function checkPaymentStatusAction(
   referenceOrId: string
 ): Promise<PaymentOperationResult<PaymentStatusResult>> {
   return serviceGetPublicPaymentStatus(referenceOrId);
+}
+
+/**
+ * Member / Applicant: Server Action to generate a short-lived (5-minute) signed URL
+ * to securely download their own payment receipt.
+ * Strictly verifies ownership by the authenticated member/applicant.
+ */
+export async function getMemberOwnPaymentReceiptSignedUrlAction(
+  paymentId?: string
+): Promise<PaymentOperationResult<PaymentSignedUrlResult>> {
+  const authResult = await getMemberAuthResult();
+  if (authResult.status !== 'authenticated' && authResult.status !== 'pending_activation') {
+    return { success: false, error: 'Unauthorized: Member login required to download receipts.' };
+  }
+
+  const email =
+    authResult.status === 'authenticated'
+      ? authResult.session.user.email
+      : authResult.user.email;
+
+  if (!email) {
+    return { success: false, error: 'User email not found in active session.' };
+  }
+
+  return serviceGetMemberOwnPaymentReceiptSignedUrl(email, paymentId);
+}
+
+/**
+ * Member / Applicant: Server Action to retrieve the member's application payment details.
+ */
+export async function getMemberApplicationPaymentAction(
+  applicationId: string
+): Promise<PaymentOperationResult<MemberPaymentSummary | null>> {
+  const authResult = await getMemberAuthResult();
+  if (authResult.status !== 'authenticated' && authResult.status !== 'pending_activation') {
+    return { success: false, error: 'Unauthorized: Member login required.' };
+  }
+
+  const payment = await serviceGetMemberApplicationPayment(applicationId);
+  return { success: true, data: payment };
 }

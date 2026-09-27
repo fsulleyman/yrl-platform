@@ -240,3 +240,100 @@ export function formatReviewsCsv(
 
   return buildCsvString(headers, rows);
 }
+
+/**
+ * Converts payment records to RFC 4180 CSV with UTF-8 BOM and formula injection defense.
+ */
+export function formatPaymentsCsv(
+  payments: Record<string, any>[]
+): string {
+  const headers = [
+    'Payment Reference',
+    'Application Number',
+    'Applicant Name',
+    'Region',
+    'Amount',
+    'Currency',
+    'Status',
+    'Transaction Reference',
+    'Claimed Payment Date',
+    'Verified Date',
+    'Verified By',
+    'Rejection Reason',
+    'Submission Date',
+  ];
+
+  const rows = payments.map((p) => {
+    const app = p.membership_applications || {};
+    return [
+      p.payment_reference || '',
+      app.application_number || p.application_number || '',
+      app.full_name || p.full_name || '',
+      app.region || p.region || '',
+      typeof p.amount === 'number' ? p.amount.toFixed(2) : p.amount || '',
+      p.currency || 'GHS',
+      p.status || '',
+      p.transaction_reference || '',
+      p.claimed_payment_date || '',
+      p.verified_at || '',
+      p.verified_by || '',
+      p.rejection_reason || '',
+      p.created_at || '',
+    ];
+  });
+
+  return buildCsvString(headers, rows);
+}
+
+/**
+ * Converts membership applications to RFC 4180 CSV with UTF-8 BOM and formula injection defense.
+ */
+export function formatApplicationsCsv(
+  applications: Record<string, any>[]
+): string {
+  const headers = [
+    'Application Number',
+    'Status',
+    'Full Name',
+    'Date of Birth',
+    'Gender',
+    'Phone Number',
+    'WhatsApp Number',
+    'Email Address',
+    'Region',
+    'District / Municipality',
+    'Town / Community',
+    'Occupation',
+    'Education Level',
+    'Area of Study / Profession',
+    'Why Join Statement',
+    'Availability',
+    'Engagement Interests',
+    'Declaration Agreed',
+    'Submission Date',
+  ];
+
+  const rows = applications.map((app) => [
+    app.application_number || '',
+    app.status || '',
+    app.full_name || '',
+    app.date_of_birth || '',
+    app.gender || '',
+    app.phone_number || '',
+    app.whatsapp_number || '',
+    app.email || '',
+    app.region || '',
+    app.district_municipality || '',
+    app.town_community || '',
+    app.occupation || '',
+    app.education_level || '',
+    app.area_of_study_profession || '',
+    app.why_join || '',
+    app.availability || '',
+    app.engagement_interests || [],
+    app.declaration_agreed ? 'Yes' : 'No',
+    app.created_at || '',
+  ]);
+
+  return buildCsvString(headers, rows);
+}

@@ -41,6 +41,8 @@ import {
   type PaystackInitializeResult,
   type PaystackWebhookEvent,
   type PaymentStatusResult,
+  type MemberPaymentSummary,
+  type PaymentReconciliationSummary,
 } from './types';
 import {
   initializePaystackTransaction,
@@ -60,16 +62,16 @@ import {
 } from '@/lib/validations/payment';
 
 // Fallback configuration if payment_configurations table record is missing
-// CRITICAL: MoMo destination is strictly NULL until authorized administrator configures it
-const DEFAULT_PAYMENT_CONFIG: PaymentConfiguration = {
+// Authoritative official MoMo payment configuration for Youth Republic Leadership
+export const DEFAULT_PAYMENT_CONFIG: PaymentConfiguration = {
   id: '00000000-0000-0000-0000-000000000000',
   config_key: 'default',
   membership_fee: 5.0,
   currency: 'GHS',
-  momo_number: null,
-  momo_account_name: 'Youth Republic Leadership',
+  momo_number: '0245600135',
+  momo_account_name: 'Sualihu Arrimeyaw',
   momo_instructions:
-    'Official Mobile Money payment destination is currently being configured by the YRL Secretariat. Please check back shortly.',
+    'To become an active YRL member, you must pay the required membership fee of GH₵5.00 through the official Mobile Money channel below. After making the payment, enter your MoMo transaction/reference number and upload your payment receipt.',
   is_active: true,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
@@ -1394,7 +1396,7 @@ export async function getAdminPaymentsList(
     let query = supabase
       .from('payments')
       .select(
-        'id, payment_reference, transaction_reference, amount, currency, status, claimed_payment_date, created_at, storage_object_path, receipt_mime_type, receipt_file_size, membership_applications!inner(id, application_number, full_name, region, phone_number, status)',
+        'id, payment_reference, transaction_reference, payment_method, rejection_reason, amount, currency, status, claimed_payment_date, created_at, storage_object_path, receipt_mime_type, receipt_file_size, membership_applications!inner(id, application_number, full_name, region, phone_number, status)',
         { count: 'exact' }
       );
 
@@ -1411,6 +1413,42 @@ export async function getAdminPaymentsList(
     // Status filter
     if (filters.status && filters.status !== 'all') {
       query = query.eq('status', filters.status);
+    }
+
+    // Receipt presence filter
+    if (filters.hasReceipt === true || filters.hasReceipt === 'with_receipt') {
+      query = query.not('storage_object_path', 'is', null);
+    } else if (filters.hasReceipt === false || filters.hasReceipt === 'without_receipt') {
+      query = query.is('storage_object_path', null);
+    }
+
+    // Payment method filter
+    if (filters.paymentMethod && filters.paymentMethod !== 'all') {
+      query = query.eq('payment_method', filters.paymentMethod);
+    }
+
+    // Date range filter
+    if (filters.dateRange === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      query = query.gte('created_at', today.toISOString());
+    } else if (filters.dateRange === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      query = query.gte('created_at', d.toISOString());
+    } else if (filters.dateRange === '30days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      query = query.gte('created_at', d.toISOString());
+    } else if (filters.dateRange === 'custom') {
+      if (filters.startDate) {
+        query = query.gte('created_at', new Date(filters.startDate).toISOString());
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', end.toISOString());
+      }
     }
 
     // Search filter
@@ -1449,6 +1487,8 @@ export async function getAdminPaymentsList(
         has_receipt: Boolean(row.storage_object_path),
         receipt_mime_type: row.receipt_mime_type,
         receipt_file_size: row.receipt_file_size,
+        payment_method: row.payment_method,
+        rejection_reason: row.rejection_reason,
       };
     });
 
@@ -1484,6 +1524,109 @@ export async function getAdminPaymentsList(
         ? verifiedPayments[0].currency
         : 'GHS';
 
+    // Authoritative Operational Reconciliation Calculation:
+    // Aggregates exact payment states across administrator's authorized scope
+    let reconQuery = supabase
+      .from('payments')
+      .select('amount, status, storage_object_path, membership_applications!inner(region)');
+
+    if (session.role === 'regional_coordinator') {
+      if (session.assignedRegion) {
+        reconQuery = reconQuery.eq(
+          'membership_applications.region',
+          session.assignedRegion
+        );
+      }
+    } else if (filters.region && filters.region !== 'all') {
+      reconQuery = reconQuery.eq(
+        'membership_applications.region',
+        filters.region
+      );
+    }
+
+    if (filters.dateRange === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      reconQuery = reconQuery.gte('created_at', today.toISOString());
+    } else if (filters.dateRange === '7days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      reconQuery = reconQuery.gte('created_at', d.toISOString());
+    } else if (filters.dateRange === '30days') {
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      reconQuery = reconQuery.gte('created_at', d.toISOString());
+    } else if (filters.dateRange === 'custom') {
+      if (filters.startDate) {
+        reconQuery = reconQuery.gte('created_at', new Date(filters.startDate).toISOString());
+      }
+      if (filters.endDate) {
+        const end = new Date(filters.endDate);
+        end.setHours(23, 59, 59, 999);
+        reconQuery = reconQuery.lte('created_at', end.toISOString());
+      }
+    }
+
+    const { data: allScopedPayments } = await reconQuery;
+    const scopedList = allScopedPayments || [];
+
+    let totalRecords = scopedList.length;
+    let pendingVerificationCount = 0;
+    let verifiedCount = 0;
+    let rejectedCount = 0;
+    let failedCount = 0;
+    let awaitingReceiptCount = 0;
+    let receiptSubmittedCount = 0;
+    let totalSubmittedAmount = 0;
+    let totalVerifiedAmount = 0;
+    let totalPendingAmount = 0;
+    let totalRejectedAmount = 0;
+    let receiptsWithEvidenceCount = 0;
+
+    for (const p of scopedList) {
+      const amt = Number(p.amount || 0);
+      if (p.storage_object_path) {
+        receiptsWithEvidenceCount++;
+      }
+      if (p.status === 'pending_verification') {
+        pendingVerificationCount++;
+        totalPendingAmount += amt;
+        totalSubmittedAmount += amt;
+      } else if (p.status === 'successful') {
+        verifiedCount++;
+        totalVerifiedAmount += amt;
+      } else if (p.status === 'rejected') {
+        rejectedCount++;
+        totalRejectedAmount += amt;
+      } else if (p.status === 'failed') {
+        failedCount++;
+      } else if (p.status === 'pending') {
+        awaitingReceiptCount++;
+      } else if (p.status === 'receipt_submitted') {
+        receiptSubmittedCount++;
+        totalSubmittedAmount += amt;
+      }
+    }
+
+    const finalVerifiedAmount = totalVerifiedAmount || totalAmountReceived;
+    const finalVerifiedCount = verifiedCount || verifiedPaymentsCount;
+
+    const reconciliation: PaymentReconciliationSummary = {
+      totalRecords: totalRecords || finalVerifiedCount || totalCount,
+      pendingVerificationCount,
+      verifiedCount: finalVerifiedCount,
+      rejectedCount,
+      failedCount,
+      awaitingReceiptCount,
+      receiptSubmittedCount,
+      totalSubmittedAmount: totalSubmittedAmount || finalVerifiedAmount,
+      totalVerifiedAmount: finalVerifiedAmount,
+      totalPendingAmount,
+      totalRejectedAmount,
+      receiptsWithEvidenceCount,
+      currency: summaryCurrency,
+    };
+
     return {
       success: true,
       data: {
@@ -1495,6 +1638,7 @@ export async function getAdminPaymentsList(
         totalAmountReceived,
         verifiedPaymentsCount,
         currency: summaryCurrency,
+        reconciliation,
       },
     };
   } catch (err: any) {
@@ -2037,6 +2181,149 @@ export async function getPublicPaymentStatus(
     return {
       success: false,
       error: sanitizeError(err, 'Failed to retrieve payment status.'),
+    };
+  }
+}
+
+/**
+ * Member / Applicant: Fetches the latest payment summary for a member's application.
+ */
+export async function getMemberApplicationPayment(
+  applicationId: string
+): Promise<MemberPaymentSummary | null> {
+  try {
+    const supabase = createAdminClient();
+    const { data: payment, error } = await supabase
+      .from('payments')
+      .select('id, payment_reference, transaction_reference, amount, currency, status, payment_method, claimed_payment_date, storage_object_path, receipt_original_filename, receipt_mime_type, receipt_file_size, receipt_uploaded_at, submitted_at, verified_at, rejected_at, rejection_reason')
+      .eq('application_id', applicationId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !payment) {
+      return null;
+    }
+
+    return {
+      id: payment.id,
+      payment_reference: payment.payment_reference,
+      transaction_reference: payment.transaction_reference,
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      status: payment.status,
+      payment_method: payment.payment_method,
+      claimed_payment_date: payment.claimed_payment_date,
+      has_receipt: Boolean(payment.storage_object_path),
+      receipt_original_filename: payment.receipt_original_filename,
+      receipt_mime_type: payment.receipt_mime_type,
+      receipt_file_size: payment.receipt_file_size,
+      receipt_uploaded_at: payment.receipt_uploaded_at,
+      submitted_at: payment.submitted_at,
+      verified_at: payment.verified_at,
+      rejected_at: payment.rejected_at,
+      rejection_reason: payment.rejection_reason,
+    };
+  } catch (err) {
+    console.error('[Payment Error] Failed to fetch member application payment:', err);
+    return null;
+  }
+}
+
+/**
+ * Member / Applicant: Generates a short-lived (5-minute) signed URL for an authenticated member/applicant
+ * to download/view their own uploaded payment receipt.
+ *
+ * Security:
+ * - Strictly verifies that the payment belongs to the authenticated applicant's email (anti-IDOR)
+ * - Verifies private bucket and object path existence
+ * - Never returns public URLs
+ * - Emits member_receipt_downloaded audit log
+ */
+export async function getMemberOwnPaymentReceiptSignedUrl(
+  memberEmail: string,
+  paymentId?: string
+): Promise<PaymentOperationResult<PaymentSignedUrlResult>> {
+  try {
+    const supabase = createAdminClient();
+    const normalizedEmail = memberEmail.toLowerCase().trim();
+
+    // 1. Fetch applicant's application by email
+    const { data: application, error: appError } = await supabase
+      .from('membership_applications')
+      .select('id, application_number, email')
+      .ilike('email', normalizedEmail)
+      .order('submitted_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (appError || !application) {
+      return { success: false, error: 'Application record not found for your account.' };
+    }
+
+    // 2. Fetch payment belonging to this application
+    let query = supabase
+      .from('payments')
+      .select('id, payment_reference, storage_bucket, storage_object_path, receipt_original_filename, status')
+      .eq('application_id', application.id);
+
+    if (paymentId) {
+      query = query.eq('id', paymentId);
+    }
+
+    const { data: payment, error: payError } = await query
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (payError || !payment) {
+      return { success: false, error: 'Payment record not found for your application.' };
+    }
+
+    // 3. Receipt presence check
+    if (!payment.storage_object_path) {
+      return { success: false, error: 'No receipt file has been uploaded for this payment.' };
+    }
+
+    const bucketName = payment.storage_bucket || 'payment-receipts';
+    const expiresIn = 300; // 5 minutes
+
+    // 4. Generate signed URL from private storage bucket
+    const { data: signedData, error: signError } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(payment.storage_object_path, expiresIn);
+
+    if (signError || !signedData?.signedUrl) {
+      return { success: false, error: 'Unable to generate secure receipt access link.' };
+    }
+
+    // 5. Audit log
+    await supabase.from('audit_logs').insert({
+      entity_type: 'payment',
+      entity_id: payment.id,
+      actor_id: normalizedEmail,
+      action: 'member_receipt_downloaded',
+      previous_state: null,
+      new_state: {
+        payment_reference: payment.payment_reference,
+        application_id: application.id,
+        storage_bucket: bucketName,
+        downloaded_by: normalizedEmail,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        signedUrl: signedData.signedUrl,
+        expiresIn,
+        filename: payment.receipt_original_filename || 'payment-receipt',
+      },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: sanitizeError(err, 'Failed to generate secure receipt download link.'),
     };
   }
 }
