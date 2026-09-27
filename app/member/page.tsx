@@ -803,7 +803,7 @@ export default async function MemberDashboardPage() {
                   Account & Security
                 </h2>
                 <p className="text-xs text-slate-600">
-                  Manage your authenticated session and view account security status.
+                  Manage your account and view your security status.
                 </p>
               </div>
             </div>
@@ -813,7 +813,7 @@ export default async function MemberDashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wider block">
-                Authenticated Account Email
+                Signed-In Email
               </span>
               <span className="text-sm font-semibold text-slate-900 font-mono mt-1 block">
                 {member.email}
@@ -822,10 +822,10 @@ export default async function MemberDashboardPage() {
 
             <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
               <span className="text-xs font-medium text-slate-500 uppercase tracking-wider block">
-                Session Authorization Model
+                Account Status
               </span>
-              <span className="text-xs font-semibold text-emerald-700 mt-1 block">
-                Server-Authoritative &bull; HTTP-Only Cookies
+              <span className="text-sm font-semibold text-emerald-700 mt-1 block">
+                {member.status === 'active' ? 'Secure & Active' : (member.status ? member.status.charAt(0).toUpperCase() + member.status.slice(1) : 'Inactive')}
               </span>
             </div>
           </div>
@@ -833,8 +833,7 @@ export default async function MemberDashboardPage() {
           <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
             <p>
-              Your member identity is cryptographically validated and bound to your official membership record server-side.
-              Client-side parameters or identity modifications are strictly ignored.
+              Your account is securely linked to your official YRL membership record.
             </p>
           </div>
         </div>
