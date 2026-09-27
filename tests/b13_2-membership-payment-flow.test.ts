@@ -744,26 +744,26 @@ describe('Phase B13.2: Membership Application & Manual Mobile Money Receipt Subm
   });
 
   // ===========================================================================
-  // 13. Oversized File Rejection (> 5MB)
+  // 13. Oversized File Rejection (> 4MB)
   // ===========================================================================
-  describe('13. Oversized File Rejection (> 5MB)', () => {
-    it('rejects file larger than 5MB (MAX_RECEIPT_FILE_SIZE_BYTES)', async () => {
-      expect(MAX_RECEIPT_FILE_SIZE_BYTES).toBe(5 * 1024 * 1024);
+  describe('13. Oversized File Rejection (> 4MB)', () => {
+    it('rejects file larger than 4MB (MAX_RECEIPT_FILE_SIZE_BYTES)', async () => {
+      expect(MAX_RECEIPT_FILE_SIZE_BYTES).toBe(4 * 1024 * 1024);
 
       const formData = new FormData();
       formData.append('payment_reference', samplePayRef);
       formData.append('transaction_reference', 'TXN-12345678');
-      // Create a dummy file object with size property over 5MB
+      // Create a dummy file object with size property over 4MB
       const oversizedBlob = new Blob(['x'], { type: 'image/jpeg' });
-      Object.defineProperty(oversizedBlob, 'size', { value: 6 * 1024 * 1024 });
+      Object.defineProperty(oversizedBlob, 'size', { value: 5 * 1024 * 1024 });
       const oversizedFile = new File([oversizedBlob], 'huge_receipt.jpg', { type: 'image/jpeg' });
-      Object.defineProperty(oversizedFile, 'size', { value: 6 * 1024 * 1024 });
+      Object.defineProperty(oversizedFile, 'size', { value: 5 * 1024 * 1024 });
 
       formData.append('receipt_file', oversizedFile);
 
       const res = await submitApplicantReceipt(formData);
       expect(res.success).toBe(false);
-      expect(res.error).toContain('exceeds the maximum allowed limit of 5MB');
+      expect(res.error).toContain('exceeds the maximum allowed limit of 4MB');
     });
   });
 

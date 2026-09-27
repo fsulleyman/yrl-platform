@@ -417,12 +417,12 @@ export default function JoinPage() {
     if (!receiptForm.file) {
       newReceiptErrors.file = 'Please upload a receipt file (JPEG, PNG, WEBP, or PDF).';
     } else {
-      if (receiptForm.file.size > 5 * 1024 * 1024) {
-        newReceiptErrors.file = 'File size cannot exceed 5MB.';
+      if (receiptForm.file.size > 4 * 1024 * 1024) {
+        newReceiptErrors.file = 'Receipt file is too large. Please upload a receipt no larger than 4 MB.';
       }
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
       if (!allowedTypes.includes(receiptForm.file.type)) {
-        newReceiptErrors.file = 'Receipt must be a JPEG, PNG, WEBP, or PDF document.';
+        newReceiptErrors.file = 'Please upload a supported receipt image or PDF.';
       }
     }
 
@@ -457,7 +457,7 @@ export default function JoinPage() {
       }
     } catch {
       setReceiptErrors({
-        _server: 'A network error occurred while uploading your receipt. Please try again.',
+        _server: "We couldn't upload your receipt right now. Please check your connection and try again. If the problem continues, please contact YRL support.",
       });
     } finally {
       setIsUploadingReceipt(false);
@@ -468,7 +468,12 @@ export default function JoinPage() {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setReceiptForm((prev) => ({ ...prev, file: selectedFile }));
-      if (receiptErrors.file) {
+      if (selectedFile.size > 4 * 1024 * 1024) {
+        setReceiptErrors((prev) => ({
+          ...prev,
+          file: 'Receipt file is too large. Please upload a receipt no larger than 4 MB.',
+        }));
+      } else if (receiptErrors.file) {
         setReceiptErrors((prev) => {
           const updated = { ...prev };
           delete updated.file;
@@ -1239,7 +1244,7 @@ export default function JoinPage() {
 
                         <div>
                           <Label htmlFor="receipt_file" required>
-                            Payment Receipt / Screenshot (JPEG, PNG, WEBP, or PDF • Max 5MB)
+                            Payment Receipt / Screenshot (JPEG, PNG, WEBP, or PDF • Max 4MB)
                           </Label>
                           <input
                             type="file"
@@ -1278,7 +1283,7 @@ export default function JoinPage() {
                                   Click or drag & drop to upload payment receipt
                                 </p>
                                 <p className="text-xs text-slate-500">
-                                  PNG, JPG, WEBP, or PDF up to 5MB
+                                  PNG, JPG, WEBP, or PDF up to 4MB
                                 </p>
                               </div>
                             )}

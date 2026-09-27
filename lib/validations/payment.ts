@@ -15,8 +15,8 @@ export const ALLOWED_RECEIPT_MIME_TYPES = [
   'application/pdf',
 ] as const;
 
-// Maximum allowed receipt file size (5MB in bytes)
-export const MAX_RECEIPT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+// Maximum allowed receipt file size (4MB in bytes / 4,194,304 bytes)
+export const MAX_RECEIPT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 
 /**
  * Validation schema for public membership application submission.

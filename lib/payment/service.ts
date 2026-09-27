@@ -618,8 +618,8 @@ export async function submitApplicantReceipt(
     if (receipt_file.size > MAX_RECEIPT_FILE_SIZE_BYTES) {
       return {
         success: false,
-        error: 'Receipt file size exceeds the maximum allowed limit of 5MB.',
-        fieldErrors: { receipt_file: ['File size cannot exceed 5MB'] },
+        error: 'Receipt file size exceeds the maximum allowed limit of 4MB.',
+        fieldErrors: { receipt_file: ['File size cannot exceed 4MB'] },
       };
     }
 
