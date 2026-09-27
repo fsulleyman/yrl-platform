@@ -235,3 +235,25 @@ export async function getMemberApplicationPaymentAction(
   const payment = await serviceGetMemberApplicationPayment(applicationId);
   return { success: true, data: payment };
 }
+
+/**
+ * Public / Applicant: Server Action to check if the current browser session has an active
+ * application on file, allowing safe recovery on /get-involved/join without refactoring the client boundary.
+ */
+export async function getApplicantSessionRecoveryAction(): Promise<{
+  hasExistingApplication: boolean;
+  applicationNumber?: string;
+} | null> {
+  try {
+    const authResult = await getMemberAuthResult();
+    if (authResult.status === 'pending_activation') {
+      return {
+        hasExistingApplication: true,
+        applicationNumber: authResult.application.application_number,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}

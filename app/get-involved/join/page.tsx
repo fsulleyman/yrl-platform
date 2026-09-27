@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import {
   CheckCircle2,
@@ -56,6 +56,7 @@ import {
 import {
   createMembershipApplication,
   submitApplicantReceipt,
+  getApplicantSessionRecoveryAction,
 } from '@/lib/actions/payment';
 import type { PaymentInstructions } from '@/lib/payment/types';
 
@@ -131,6 +132,23 @@ export default function JoinPage() {
 
   // MoMo clipboard copy feedback state
   const [copiedMomo, setCopiedMomo] = useState(false);
+
+  // Authenticated applicant session recovery state
+  const [existingApplicationNumber, setExistingApplicationNumber] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    getApplicantSessionRecoveryAction()
+      .then((res) => {
+        if (isMounted && res?.hasExistingApplication && res.applicationNumber) {
+          setExistingApplicationNumber(res.applicationNumber);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleCopyMomo = (numberToCopy: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -530,6 +548,32 @@ export default function JoinPage() {
                 </div>
               </Alert>
             </div>
+
+            {/* Authenticated Applicant Resumption Recovery Alert */}
+            {existingApplicationNumber && (
+              <div className="mb-8">
+                <Alert
+                  variant="info"
+                  title="Your YRL Membership Application is Already on File"
+                  className="bg-blue-50 border-blue-300 text-blue-950"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-2">
+                    <p className="text-xs sm:text-sm text-blue-900 leading-relaxed">
+                      You are signed in and your application (<strong>{existingApplicationNumber}</strong>) has already been submitted.
+                      You do not need to register again. You can continue your membership payment and submit your receipt directly.
+                    </p>
+                    <Link href="/member/payment" className="shrink-0">
+                      <Button
+                        size="sm"
+                        className="bg-[#0B1F3A] hover:bg-[#15345E] text-white text-xs font-semibold"
+                      >
+                        Submit Payment Receipt <ArrowRight className="w-3.5 h-3.5 ml-1 inline" />
+                      </Button>
+                    </Link>
+                  </div>
+                </Alert>
+              </div>
+            )}
 
             {/* PROGRESS STEPPER */}
             <div className="mb-8">

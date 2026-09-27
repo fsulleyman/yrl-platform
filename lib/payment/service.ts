@@ -19,6 +19,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { publicSubmissionRateLimiter, extractClientIp } from '@/lib/security/rate-limit';
 import { sanitizeError } from '@/lib/errors';
 import { sendMembershipEmail } from '@/lib/email/resend';
+import { getMemberAuthResult } from '@/lib/auth/server';
 import { type AdminSession } from '@/lib/auth/types';
 import {
   type PaymentConfiguration,
@@ -646,6 +647,31 @@ export async function submitApplicantReceipt(
         success: false,
         error: 'Payment reference was not found. Please verify your reference number.',
       };
+    }
+
+    // 3b. Anti-IDOR & Authenticated Ownership Check:
+    // If the request originates from an authenticated member or applicant session,
+    // verify that the payment reference strictly belongs to the authenticated applicant.
+    try {
+      const authResult = await getMemberAuthResult();
+      if (authResult.status === 'pending_activation') {
+        if (payment.application_id !== authResult.application.id) {
+          return {
+            success: false,
+            error: 'Unauthorized: You can only submit payment receipts for your own application.',
+          };
+        }
+      } else if (authResult.status === 'authenticated') {
+        if (authResult.session.application && payment.application_id !== authResult.session.application.id) {
+          return {
+            success: false,
+            error: 'Unauthorized: You can only submit payment receipts for your own application.',
+          };
+        }
+      }
+    } catch {
+      // In unauthenticated context (e.g. immediate public registration flow on join page),
+      // allow initial public submission against the generated payment reference.
     }
 
     // Duplicate / Replay Protection:

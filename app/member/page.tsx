@@ -48,7 +48,7 @@ function getApplicationLifecycleDetails(status: string) {
         headline: 'Action Required: Complete Membership Fee Payment',
         description: 'Membership fee required: GH₵5.00. Your application has been received. Please complete payment of the required GH₵5.00 membership fee via Mobile Money and submit your receipt to enter the verification queue.',
         currentStep: 2,
-        actionLink: '/get-involved/join',
+        actionLink: '/member/payment',
         actionLabel: 'Submit Payment Receipt',
       };
     case 'receipt_submitted':
@@ -79,7 +79,7 @@ function getApplicationLifecycleDetails(status: string) {
         headline: 'Payment Requires Attention',
         description: 'Your GH₵5.00 membership payment requires attention. The uploaded payment receipt could not be verified by the secretariat. Please ensure you have transferred the required GH₵5.00 fee and uploaded valid proof of payment.',
         currentStep: 2,
-        actionLink: '/get-involved/join',
+        actionLink: '/member/payment',
         actionLabel: 'Resubmit Payment Proof',
       };
     default:
